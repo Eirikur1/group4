@@ -24,6 +24,8 @@ export interface InsertWaterSourceInput {
   rating?: number | null;
 }
 
+const REQUEST_TIMEOUT_MS = 60_000; // 60s for slow networks / cold backend
+
 /** Insert a user-uploaded water source via the backend. Returns the new Fountain or null. */
 export async function insertWaterSource(
   input: InsertWaterSourceInput
@@ -34,6 +36,8 @@ export async function insertWaterSource(
       "Backend URL not set. Add EXPO_PUBLIC_API_URL to a .env file in the Frontend folder (e.g. http://localhost:3000), then restart the dev server."
     );
   }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${base}/api/water-sources`, {
       method: "POST",
@@ -45,7 +49,9 @@ export async function insertWaterSource(
         images: input.images,
         rating: input.rating ?? null,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error((err as { error?: string }).error ?? "Failed to create water source");
@@ -53,6 +59,19 @@ export async function insertWaterSource(
     const data = (await res.json()) as Fountain;
     return data ?? null;
   } catch (e) {
+    clearTimeout(timeoutId);
+    const isAbort = e instanceof Error && e.name === "AbortError";
+    const isNetwork =
+      e instanceof TypeError ||
+      (e instanceof Error &&
+        (/network request timed out|timeout|failed to fetch|network error/i.test(e.message) || isAbort));
+    if (isNetwork || isAbort) {
+      const hint =
+        base.includes("localhost") || base.includes("127.0.0.1")
+          ? " On a physical device, set EXPO_PUBLIC_API_URL in Frontend/.env to your computer's IP (e.g. http://192.168.1.x:3000) and ensure the backend is running."
+          : " Check that the backend is running and reachable.";
+      throw new Error(`Network request timed out.${hint}`);
+    }
     throw e;
   }
 }
