@@ -1,9 +1,15 @@
 # Supabase in this project
 
+## Architecture
+
+- **Backend** (`Backend/`): Holds the **Supabase service_role key** and talks to the **database** (`water_sources` table). The app never touches the DB directly for water sources.
+- **Frontend**: Calls the backend at `EXPO_PUBLIC_API_URL` for **GET/POST /api/water-sources**. Photo uploads still go **directly to Supabase Storage** from the app (anon key, public bucket).
+
 ## When to use Supabase vs the water-fountains API
 
-- **OSM / Overpass API** (what we use for “add water fountains from the API”): Use for **global, read-only** POI data. Fetched near the user and shown with the blue AdminPin. No need to store these in Supabase.
-- **Supabase**: Use for **your app’s own data** – e.g. user-added fountains (from “Add a new water source”), user accounts, favorites, ratings. Store only what users create or modify in your app; keep using the API for the rest.
+- **OSM / Overpass API**: Global, read-only POI data; shown with the blue AdminPin.
+- **Supabase (via backend)**: User-uploaded water sources (table `water_sources`).
+- **Supabase (from app)**: Photo uploads to the `fountain-photos` bucket only.
 
 ## Setup
 
