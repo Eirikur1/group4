@@ -15,7 +15,12 @@
 
 1. **Create a Supabase project** at [app.supabase.com](https://app.supabase.com) (or [database.new](https://database.new)).
 
-2. **Copy env file and add your keys:**
+2. **Enable Auth (for login):**
+   - In the Dashboard go to **Authentication** → **Providers**.
+   - Enable **Email** (and optionally turn off "Confirm email" if you don’t want verification emails).
+   - Use **Project Settings** → **API** and copy the **Project URL** and the **anon public** key (the one labeled "anon" / "public"; it’s a long JWT starting with `eyJ...`).
+
+3. **Copy env file and add your keys:**
    ```bash
    cp .env.example .env
    ```

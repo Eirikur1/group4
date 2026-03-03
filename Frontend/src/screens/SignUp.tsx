@@ -1,24 +1,63 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { BackHeader, FormInput, SocialButtons } from "../components";
+import { supabase } from "../lib/supabase";
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function SignUp() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigation = useNavigation<NavProp>();
 
-  const handleContinue = (e: React.FormEvent) => {
-    // TODO: Implement sign up logic
+  const handleContinue = async () => {
+    setError(null);
+    if (!email.trim() || !password || !name.trim()) {
+      setError("Please fill in name, email and password.");
+      return;
+    }
+    if (!supabase) {
+      setError("Supabase is not configured. Check your .env file.");
+      return;
+    }
+    setLoading(true);
+    const { data, error: authError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: { full_name: name.trim() },
+      },
+    });
+    setLoading(false);
+    if (authError) {
+      setError(authError.message);
+      return;
+    }
+    if (data.session) {
+      navigation.navigate("Home");
+    } else if (data.user && !data.session) {
+      setError(
+        "Check your email to confirm your account, then sign in."
+      );
+    }
   };
 
   const handleSocialLogin = (provider: "google" | "apple" | "facebook") => {
-    // TODO: Implement social login
+    // TODO: Implement social login (Supabase Auth → Providers)
   };
 
   return (
@@ -29,6 +68,11 @@ export default function SignUp() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        {error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
         <FormInput
           label="Full Name"
           type="text"
@@ -45,13 +89,28 @@ export default function SignUp() {
           onChange={setEmail}
           required
         />
+        <FormInput
+          label="Password"
+          type="password"
+          placeholder="Create a password (min 6 characters)"
+          value={password}
+          onChange={setPassword}
+          required
+        />
         <Pressable
           style={({ pressed }) => [
             styles.button,
             pressed && styles.buttonPressed,
+            loading && styles.buttonDisabled,
           ]}
+          onPress={handleContinue}
+          disabled={loading}
         >
-          <Text style={styles.buttonText}>Continue</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Create Account</Text>
+          )}
         </Pressable>
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
@@ -95,4 +154,12 @@ const styles = StyleSheet.create({
   divider: { flexDirection: "row", alignItems: "center", marginVertical: 16 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#ddd" },
   dividerText: { marginHorizontal: 12, fontSize: 14, color: "#999" },
+  errorBox: {
+    backgroundColor: "#ffebee",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  errorText: { color: "#c62828", fontSize: 14 },
+  buttonDisabled: { opacity: 0.7 },
 });

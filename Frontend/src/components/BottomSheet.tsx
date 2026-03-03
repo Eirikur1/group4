@@ -48,6 +48,7 @@ export default function BottomSheet({
   const currentIndexRef = useRef(index);
   const currentHeightRef = useRef(initialHeight);
   const gestureStartHeightRef = useRef(initialHeight);
+  const gestureStartIndexRef = useRef(index);
   const onSnapChangeRef = useRef(onSnapChange);
   onSnapChangeRef.current = onSnapChange;
 
@@ -74,6 +75,7 @@ export default function BottomSheet({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
       onPanResponderGrant: () => {
         gestureStartHeightRef.current = currentHeightRef.current;
+        gestureStartIndexRef.current = currentIndexRef.current;
       },
       onPanResponderMove: (_, g) => {
         const next = gestureStartHeightRef.current - g.dy;
@@ -84,13 +86,24 @@ export default function BottomSheet({
         currentHeightRef.current = clamped;
         animValue.setValue(clamped);
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (_, gestureState) => {
         const current = currentHeightRef.current;
         const minH = heights[0];
         const maxH = heights[heights.length - 1];
-        const closeThreshold = minH + (maxH - minH) * 0.2;
+        const range = maxH - minH;
+        /** When starting from closed: pull up past this to open (lower = easier to open) */
+        const openThreshold = minH + range * 0.1;
+        /** When starting from open: swipe down past this to close (higher = easier to close) */
+        const closeThreshold = minH + range * 0.7;
 
-        const targetIndex = current <= closeThreshold ? 0 : heights.length - 1;
+        const startedClosed = gestureStartIndexRef.current === 0;
+        const movedLittle = Math.abs(gestureState.dy) < 12 && Math.abs(gestureState.dx) < 12;
+        const targetIndex =
+          startedClosed && movedLittle
+            ? heights.length - 1
+            : startedClosed
+              ? (current > openThreshold ? heights.length - 1 : 0)
+              : (current <= closeThreshold ? 0 : heights.length - 1);
         const targetHeight = heights[targetIndex];
         currentIndexRef.current = targetIndex;
         currentHeightRef.current = targetHeight;

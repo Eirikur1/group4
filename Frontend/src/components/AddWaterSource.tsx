@@ -80,14 +80,26 @@ export default function AddWaterSource({
     }
     setUploading(true);
     try {
-      const urls = await uploadFountainPhotos(selectedUris);
-      const newFountain = await insertWaterSource({
-        name: title.trim(),
-        latitude,
-        longitude,
-        images: urls,
-        rating: selectedRating ?? undefined,
-      });
+      let urls: string[];
+      try {
+        urls = await uploadFountainPhotos(selectedUris);
+      } catch (photoErr) {
+        const msg = photoErr instanceof Error ? photoErr.message : "Photo upload failed";
+        throw new Error(`Photos: ${msg}`);
+      }
+      let newFountain;
+      try {
+        newFountain = await insertWaterSource({
+          name: title.trim(),
+          latitude,
+          longitude,
+          images: urls,
+          rating: selectedRating ?? undefined,
+        });
+      } catch (apiErr) {
+        const msg = apiErr instanceof Error ? apiErr.message : "Request failed";
+        throw new Error(`Save location: ${msg}`);
+      }
       if (newFountain) onUploadSuccess?.(newFountain);
       Alert.alert(
         "Upload complete",

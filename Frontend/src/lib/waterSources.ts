@@ -29,7 +29,11 @@ export async function insertWaterSource(
   input: InsertWaterSourceInput
 ): Promise<Fountain | null> {
   const base = getBaseUrl();
-  if (!base) return null;
+  if (!base) {
+    throw new Error(
+      "Backend URL not set. Add EXPO_PUBLIC_API_URL to a .env file in the Frontend folder (e.g. http://localhost:3000), then restart the dev server."
+    );
+  }
   try {
     const res = await fetch(`${base}/api/water-sources`, {
       method: "POST",
