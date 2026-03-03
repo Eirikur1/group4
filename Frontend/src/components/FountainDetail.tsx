@@ -32,8 +32,16 @@ const fountainRegion = (f: Fountain) => ({
 });
 
 export default function FountainDetail({ fountain }: FountainDetailProps) {
-  // Use only local images from assets/images folder (no stock/remote URLs)
+  // Prefer API/OSM images when present; otherwise use local placeholders
+  const urls: string[] =
+    (fountain.images?.length ?? 0) > 0
+      ? fountain.images!
+      : fountain.imageUrl
+        ? [fountain.imageUrl]
+        : [];
   const localImages = PLACEHOLDER_IMAGES;
+  const img1 = urls[0];
+  const img2 = urls[1];
 
   return (
     <ScrollView
@@ -71,39 +79,42 @@ export default function FountainDetail({ fountain }: FountainDetailProps) {
             </Marker>
           </MapView>
         </View>
-        <View style={styles.strokeFrame}>
-          <View style={styles.content}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title} numberOfLines={2}>
-                {fountain.name}
-              </Text>
-              <View style={styles.titleRight}>
-                {fountain.category ? (
-                  <Text style={styles.category}>{fountain.category}</Text>
-                ) : null}
-                {fountain.rating !== undefined && (
-                  <View style={styles.rating}>
-                    <Text style={styles.ratingValue}>{fountain.rating}</Text>
-                    <Ionicons name="star" size={18} color="#FFD700" />
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.imageRow}>
-              <Image
-                source={localImages[0]}
-                style={styles.galleryImage}
-                resizeMode="cover"
-              />
-              <Image
-                source={localImages[1]}
-                style={styles.galleryImage}
-                resizeMode="cover"
-              />
+        <View style={styles.belowMap}>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={2}>
+              {fountain.name}
+            </Text>
+            <View style={styles.titleRight}>
+              {fountain.category ? (
+                <Text style={styles.category}>{fountain.category}</Text>
+              ) : null}
+              {fountain.rating !== undefined && (
+                <View style={styles.rating}>
+                  <Text style={styles.ratingValue}>{fountain.rating}</Text>
+                  <Ionicons name="star" size={18} color="#FFD700" />
+                </View>
+              )}
             </View>
           </View>
-
+          <View style={styles.imageRow}>
+            <Image
+              source={img1 ? { uri: img1 } : localImages[0]}
+              style={styles.galleryImage}
+              resizeMode="cover"
+            />
+            <Image
+              source={img2 ? { uri: img2 } : localImages[1]}
+              style={styles.galleryImage}
+              resizeMode="cover"
+            />
+          </View>
+          {(fountain.description ?? "").trim() ? (
+            <Text style={styles.shortDescription} numberOfLines={3}>
+              {fountain.description!.trim()}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.strokeFrame}>
           <View style={styles.contentRest}>
             <View style={styles.ratingSection}>
               <Text style={styles.ratingQuestion}>
@@ -181,6 +192,18 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: MAP_RADIUS,
     borderBottomRightRadius: MAP_RADIUS,
     overflow: "hidden",
+  },
+  belowMap: {
+    marginHorizontal: 6,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  shortDescription: {
+    fontSize: 14,
+    color: "#555",
+    lineHeight: 20,
+    marginTop: 10,
+    paddingHorizontal: 0,
   },
   strokeFrame: {
     paddingBottom: 16,

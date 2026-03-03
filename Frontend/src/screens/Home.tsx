@@ -25,6 +25,8 @@ import {
 } from "../components";
 import { mockFountains } from "../constants/mockFountains";
 import { distanceMeters, formatDistance } from "../utils/distance";
+import { fetchWaterFountains } from "../utils/overpass";
+import { fetchUserWaterSources } from "../lib/waterSources";
 import type { Fountain } from "../types/fountain";
 
 type SheetContent = "list" | "detail" | "profile" | "addSource";
@@ -34,7 +36,8 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 export default function Home() {
-  const [fountains] = useState<Fountain[]>(mockFountains);
+  const [fountains, setFountains] = useState<Fountain[]>(mockFountains);
+  const [userFountains, setUserFountains] = useState<Fountain[]>([]);
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -47,6 +50,10 @@ export default function Home() {
   );
   const [sheetContent, setSheetContent] = useState<SheetContent>("list");
   const [currentSnap, setCurrentSnap] = useState(0);
+  const [pendingAddCoordinate, setPendingAddCoordinate] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const markerPressTimeRef = useRef(0);
   const pendingContentRef = useRef<
     | { type: "detail"; fountain: Fountain }
@@ -76,8 +83,77 @@ export default function Home() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const apiFountains = await fetchWaterFountains(
+          userLocation.latitude,
+          userLocation.longitude,
+          5000,
+        );
+        if (!cancelled) {
+          setFountains((prev) => {
+            const byId: Record<string | number, Fountain> = {};
+            prev.forEach((f) => (byId[f.id] = f));
+            apiFountains.forEach((f) => (byId[f.id] = f));
+            return Object.values(byId);
+          });
+        }
+      } catch {
+        // keep existing fountains on Overpass error
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation?.latitude, userLocation?.longitude]);
+
+  useEffect(() => {
+    (async () => {
+      const list = await fetchUserWaterSources();
+      setUserFountains(list);
+    })();
+  }, []);
+
+  const refetchUserFountains = useCallback(async () => {
+    const list = await fetchUserWaterSources();
+    setUserFountains(list);
+  }, []);
+
+  const handleUploadSuccess = useCallback(
+    (newFountain: Fountain) => {
+      refetchUserFountains();
+      setPendingAddCoordinate(null);
+      const withDistance =
+        userLocation && !newFountain.distance
+          ? {
+              ...newFountain,
+              distance: formatDistance(
+                distanceMeters(
+                  userLocation.latitude,
+                  userLocation.longitude,
+                  newFountain.latitude,
+                  newFountain.longitude,
+                ),
+              ),
+            }
+          : newFountain;
+      setSelectedFountain(withDistance);
+      setSheetContent("detail");
+      setCurrentSnap(1);
+    },
+    [refetchUserFountains, userLocation],
+  );
+
+  const allFountains = useMemo(
+    () => [...fountains, ...userFountains],
+    [fountains, userFountains],
+  );
+
   const closestFountains = useMemo(() => {
-    const list = fountains.map((f) => ({ ...f }));
+    const list = allFountains.map((f) => ({ ...f }));
     if (!userLocation) return list;
     list.forEach((f) => {
       const m = distanceMeters(
@@ -94,7 +170,7 @@ export default function Home() {
       return ma - mb;
     });
     return list;
-  }, [fountains, userLocation]);
+  }, [allFountains, userLocation]);
 
   const searchDropdownFountains = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -156,9 +232,23 @@ export default function Home() {
     setCurrentSnap(0);
   }, []);
 
+  const handleMapLongPress = useCallback(
+    (coordinate: { latitude: number; longitude: number }) => {
+      setPendingAddCoordinate(coordinate);
+    },
+    [],
+  );
+
   const handleAddLocationPress = useCallback(() => {
+    if (!pendingAddCoordinate) return;
     setSheetContent("addSource");
     setCurrentSnap(1);
+  }, [pendingAddCoordinate]);
+
+  const handleAddSourceClose = useCallback(() => {
+    setSheetContent("list");
+    setCurrentSnap(0);
+    setPendingAddCoordinate(null);
   }, []);
 
   const handleUserPress = useCallback(() => {
@@ -180,7 +270,7 @@ export default function Home() {
     <View style={styles.container}>
       {locationReady && (
       <Map
-        fountains={fountains}
+        fountains={allFountains}
         region={
           userLocation
             ? {
@@ -192,7 +282,9 @@ export default function Home() {
             : undefined
         }
         selectedFountain={selectedFountain}
+        pendingAddCoordinate={pendingAddCoordinate}
         onMapPress={handleMapPress}
+        onLongPress={handleMapLongPress}
         onFountainPress={handleFountainClick}
       />
       )}
@@ -256,13 +348,24 @@ export default function Home() {
             />
           </Pressable>
           <Pressable
-            style={styles.addLocationButton}
+            style={[
+              styles.addLocationButton,
+              !pendingAddCoordinate && styles.addLocationButtonDisabled,
+            ]}
             onPress={handleAddLocationPress}
-            accessibilityLabel="Add location"
+            disabled={!pendingAddCoordinate}
+            accessibilityLabel={
+              pendingAddCoordinate
+                ? "Add new location"
+                : "Long-press map to select a location first"
+            }
           >
             <Image
               source={require("../../assets/icons/ADd.png")}
-              style={styles.iconImage}
+              style={[
+                styles.iconImage,
+                !pendingAddCoordinate && styles.addLocationButtonIconDisabled,
+              ]}
               resizeMode="contain"
             />
           </Pressable>
@@ -316,7 +419,14 @@ export default function Home() {
             }}
           />
         )}
-        {sheetContent === "addSource" && <AddWaterSource />}
+        {sheetContent === "addSource" && pendingAddCoordinate && (
+          <AddWaterSource
+            latitude={pendingAddCoordinate.latitude}
+            longitude={pendingAddCoordinate.longitude}
+            onClose={handleAddSourceClose}
+            onUploadSuccess={handleUploadSuccess}
+          />
+        )}
       </BottomSheet>
     </View>
   );
@@ -427,6 +537,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 4,
+  },
+  addLocationButtonDisabled: {
+    opacity: 0.5,
+  },
+  addLocationButtonIconDisabled: {
+    opacity: 0.7,
   },
   iconImage: { width: 22, height: 22 },
   list: { flex: 1, minHeight: 200 },

@@ -1,5 +1,6 @@
 export interface Fountain {
-  id: number;
+  /** number for mock/Overpass, string (uuid) for user-uploaded from Supabase */
+  id: number | string;
   name: string;
   latitude: number;
   longitude: number;
@@ -11,4 +12,6 @@ export interface Fountain {
   imageUrl?: string;
   images?: string[];
   category?: string;
+  /** When true, show the blue AdminPin (e.g. for API-sourced fountains) */
+  useAdminPin?: boolean;
 }

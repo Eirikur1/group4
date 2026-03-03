@@ -70,9 +70,6 @@ export default function FountainCard({ fountain, onClick }: FountainCardProps) {
         {fountain.distance ? (
           <Text style={styles.distance}>{fountain.distance}</Text>
         ) : null}
-        {fountain.isFree !== undefined && (
-          <Text style={styles.free}>{fountain.isFree ? "Free" : "Paid"}</Text>
-        )}
       </View>
       {fountain.rating !== undefined && (
         <View style={styles.rating}>
@@ -114,7 +111,6 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   distance: { fontSize: 13, color: "#666", marginBottom: 2 },
-  free: { fontSize: 13, color: "#333" },
   rating: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingValue: { fontSize: 14, fontWeight: "600", color: "#000" },
 });

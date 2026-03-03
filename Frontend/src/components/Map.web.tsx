@@ -11,7 +11,9 @@ interface MapProps {
     longitudeDelta?: number;
   };
   selectedFountain?: Fountain | null;
+  pendingAddCoordinate?: { latitude: number; longitude: number } | null;
   onMapPress?: () => void;
+  onLongPress?: (coordinate: { latitude: number; longitude: number }) => void;
   onFountainPress?: (fountain: Fountain) => void;
 }
 

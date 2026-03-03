@@ -11,6 +11,11 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.02,
 };
 
+export interface PendingAddCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
 interface MapProps {
   fountains: Fountain[];
   region?: {
@@ -20,7 +25,10 @@ interface MapProps {
     longitudeDelta?: number;
   };
   selectedFountain?: Fountain | null;
+  /** Pin shown when user long-presses to add a new location */
+  pendingAddCoordinate?: PendingAddCoordinate | null;
   onMapPress?: () => void;
+  onLongPress?: (coordinate: PendingAddCoordinate) => void;
   onFountainPress?: (fountain: Fountain) => void;
 }
 
@@ -28,7 +36,9 @@ export default function Map({
   fountains = [],
   region,
   selectedFountain,
+  pendingAddCoordinate,
   onMapPress,
+  onLongPress,
   onFountainPress,
 }: MapProps) {
   const mapRef = useRef<MapView>(null);
@@ -81,11 +91,29 @@ export default function Map({
         style={styles.map}
         initialRegion={initialRegion}
         onPress={onMapPress}
+        onLongPress={
+          onLongPress
+            ? (e) => {
+                const { latitude, longitude } = e.nativeEvent.coordinate;
+                onLongPress({ latitude, longitude });
+              }
+            : undefined
+        }
         showsUserLocation
         showsMyLocationButton
         customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
-        mapType={Platform.OS === "ios" ? "muted" : undefined}
+        mapType={(Platform.OS === "ios" ? "muted" : "standard") as "standard" | "satellite" | "hybrid" | "none"}
       >
+        {pendingAddCoordinate && (
+          <Marker
+            coordinate={{
+              latitude: pendingAddCoordinate.latitude,
+              longitude: pendingAddCoordinate.longitude,
+            }}
+            image={require("../../assets/icons/AddPin.png")}
+            title="New location"
+          />
+        )}
         {safeFountains.map((fountain) => (
           <Marker
             key={fountain.id}
@@ -96,9 +124,11 @@ export default function Map({
             title={fountain.name}
             description={fountain.description}
             image={
-              fountain.isOperational
-                ? require("../../assets/icons/PinIcon.png")
-                : require("../../assets/icons/AdminPin.png") // For now: inactive. Later: AdminPin = verified water stations.
+              fountain.useAdminPin
+                ? require("../../assets/icons/AdminPin.png")
+                : fountain.isOperational
+                  ? require("../../assets/icons/PinIcon.png")
+                  : require("../../assets/icons/AdminPin.png")
             }
             onPress={() => onFountainPress?.(fountain)}
           />

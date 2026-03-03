@@ -5,13 +5,102 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
+  Image,
+  Alert,
+  ActivityIndicator,
+  TextInput,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
+import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
+import { insertWaterSource } from "../lib/waterSources";
+import type { Fountain } from "../types/fountain";
 
 const RATING_EMOJIS = ["😖", "😕", "😐", "🙂", "😍"];
 
-export default function AddWaterSource() {
+interface AddWaterSourceProps {
+  latitude: number;
+  longitude: number;
+  onClose?: () => void;
+  /** Called with the new fountain after save so the list/map can refresh and optionally show detail */
+  onUploadSuccess?: (newFountain: Fountain) => void;
+}
+
+export default function AddWaterSource({
+  latitude,
+  longitude,
+  onClose,
+  onUploadSuccess,
+}: AddWaterSourceProps) {
+  const [title, setTitle] = useState("");
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [selectedUris, setSelectedUris] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  const [permission, requestPermission] = ImagePicker.useMediaLibraryPermissions();
+
+  const pickImages = async () => {
+    if (permission?.status !== "granted") {
+      const { status } = await requestPermission();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission needed",
+          "Allow access to your photos to upload images for the water source."
+        );
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.length) {
+      setSelectedUris((prev) => [
+        ...prev,
+        ...result.assets.map((a) => a.uri),
+      ]);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedUris((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const canSubmit = title.trim().length > 0 && selectedUris.length > 0;
+
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      Alert.alert("Missing title", "Please enter a name for the location.");
+      return;
+    }
+    if (selectedUris.length === 0) {
+      Alert.alert("No photo", "Please add at least one photo.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const urls = await uploadFountainPhotos(selectedUris);
+      const newFountain = await insertWaterSource({
+        name: title.trim(),
+        latitude,
+        longitude,
+        images: urls,
+        rating: selectedRating ?? undefined,
+      });
+      if (newFountain) onUploadSuccess?.(newFountain);
+      Alert.alert(
+        "Upload complete",
+        `"${title.trim()}" has been added. You can view it below.`,
+        [{ text: "OK" }]
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Upload failed";
+      Alert.alert("Upload failed", message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -21,19 +110,39 @@ export default function AddWaterSource() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
     >
+      {onClose && (
+        <Pressable
+          style={styles.closeRow}
+          onPress={onClose}
+          accessibilityLabel="Cancel"
+        >
+          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Text style={styles.closeText}>Cancel</Text>
+        </Pressable>
+      )}
       <View style={styles.header}>
         <Text style={styles.title}>Add a new water source</Text>
         <Text style={styles.subtitle}>
-          Take a picture and show off a new location
+          Hold on the map to select a spot, then add details below
         </Text>
-        <Pressable
-          style={styles.openingHoursLink}
-          onPress={() => {}}
-          accessibilityLabel="Opening hours"
-        >
-          <Ionicons name="time-outline" size={18} color="#2563EB" />
-          <Text style={styles.openingHoursText}>Opening hours?</Text>
-        </Pressable>
+        <View style={styles.coordsRow}>
+          <Ionicons name="location" size={16} color="#6B7280" />
+          <Text style={styles.coordsText}>
+            {latitude.toFixed(5)}, {longitude.toFixed(5)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.fieldSection}>
+        <Text style={styles.sectionTitle}>Title for this location</Text>
+        <TextInput
+          style={styles.titleInput}
+          placeholder="e.g. Park fountain near the playground"
+          placeholderTextColor="#9CA3AF"
+          value={title}
+          onChangeText={setTitle}
+          maxLength={80}
+        />
       </View>
 
       <View style={styles.ratingSection}>
@@ -57,29 +166,51 @@ export default function AddWaterSource() {
 
       <View style={styles.uploadSection}>
         <Text style={styles.sectionTitle}>Upload a Photo</Text>
+        {selectedUris.length > 0 && (
+          <View style={styles.previewRow}>
+            {selectedUris.map((uri, index) => (
+              <View key={`${uri}-${index}`} style={styles.previewWrap}>
+                <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" />
+                <Pressable
+                  style={styles.removePreview}
+                  onPress={() => removeImage(index)}
+                  accessibilityLabel="Remove photo"
+                >
+                  <Ionicons name="close-circle" size={24} color="#fff" />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
         <Pressable
           style={styles.uploadArea}
-          onPress={() => {}}
+          onPress={pickImages}
+          disabled={uploading}
           accessibilityLabel="Choose file to upload"
         >
           <View style={styles.uploadIconWrap}>
             <Ionicons name="cloud-upload-outline" size={40} color="#9CA3AF" />
           </View>
           <Text style={styles.uploadHint}>
-            Drag & Drop or{" "}
+            Tap{" "}
             <Text style={styles.uploadLink}>Choose file</Text>
-            {" "}to upload
+            {" "}to pick photos from your library
           </Text>
           <Text style={styles.uploadFormats}>png, jpeg</Text>
         </Pressable>
       </View>
 
       <Pressable
-        style={styles.submitButton}
-        onPress={() => {}}
+        style={[styles.submitButton, (!canSubmit || uploading) && styles.submitButtonDisabled]}
+        onPress={handleSubmit}
+        disabled={!canSubmit || uploading}
         accessibilityLabel="Upload a new water source"
       >
-        <Text style={styles.submitButtonText}>Upload a new water source</Text>
+        {uploading ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.submitButtonText}>Upload a new water source</Text>
+        )}
       </Pressable>
     </ScrollView>
   );
@@ -88,6 +219,13 @@ export default function AddWaterSource() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   contentContainer: { paddingBottom: 32 },
+  closeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 16,
+  },
+  closeText: { fontSize: 16, color: "#111827", fontWeight: "500" },
   header: { marginBottom: 24 },
   title: {
     fontSize: 22,
@@ -98,18 +236,24 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: "#6B7280",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  openingHoursLink: {
+  coordsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  openingHoursText: {
-    fontSize: 15,
-    color: "#2563EB",
-    textDecorationLine: "underline",
-    fontWeight: "500",
+  coordsText: { fontSize: 13, color: "#6B7280" },
+  fieldSection: { marginBottom: 24 },
+  titleInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#111827",
+    backgroundColor: "#FFFFFF",
   },
   ratingSection: { marginBottom: 28 },
   sectionTitle: {
@@ -149,6 +293,28 @@ const styles = StyleSheet.create({
   },
   emoji: { fontSize: 26 },
   uploadSection: { marginBottom: 24 },
+  previewRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 12,
+  },
+  previewWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  removePreview: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+  },
   uploadArea: {
     borderWidth: 2,
     borderStyle: "dashed",
@@ -193,6 +359,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonText: {
     fontSize: 16,

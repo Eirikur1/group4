@@ -54,25 +54,18 @@ export default function FeaturedFountainCard({
         </MapView>
       </View>
       <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
-            {fountain.name}
-          </Text>
-          {fountain.category ? (
-            <Text style={styles.category}>{fountain.category}</Text>
-          ) : null}
-        </View>
-        <View style={styles.meta}>
-          {fountain.isFree !== undefined && (
-            <Text style={styles.free}>{fountain.isFree ? "Free" : "Paid"}</Text>
-          )}
-          {fountain.rating !== undefined && (
-            <View style={styles.rating}>
-              <Text style={styles.ratingValue}>{fountain.rating}</Text>
-              <Ionicons name="star" size={16} color="#FFD700" />
-            </View>
-          )}
-        </View>
+        <Text style={styles.title} numberOfLines={2}>
+          {fountain.name}
+        </Text>
+        {fountain.category ? (
+          <Text style={styles.category}>{fountain.category}</Text>
+        ) : null}
+        {fountain.rating !== undefined && (
+          <View style={styles.rating}>
+            <Text style={styles.ratingValue}>{fountain.rating}</Text>
+            <Ionicons name="star" size={16} color="#FFD700" />
+          </View>
+        )}
       </View>
     </Pressable>
   );
@@ -102,29 +95,17 @@ const styles = StyleSheet.create({
   },
   map: { width: "100%", height: "100%" },
   body: { padding: 16 },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 8,
-  },
   title: {
-    flex: 1,
     fontSize: 18,
     fontWeight: "700",
     color: "#000",
+    marginBottom: 4,
   },
   category: {
     fontSize: 13,
     color: "#666",
+    marginBottom: 6,
   },
-  meta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  free: { fontSize: 14, color: "#333" },
   rating: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingValue: { fontSize: 14, fontWeight: "600", color: "#000" },
 });
