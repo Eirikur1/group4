@@ -178,17 +178,15 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
             ) : null}
             {canAddPhotos && (
               <Pressable
-                style={[styles.addPhotoBtn, urls.length === 0 && styles.addPhotoBtnEmpty]}
+                style={styles.addPhotoBtn}
                 onPress={handleAddPhoto}
                 disabled={addingPhoto}
+                accessibilityLabel="Add photo"
               >
                 {addingPhoto ? (
-                  <ActivityIndicator size="small" color="#2563EB" />
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <>
-                    <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
-                    <Text style={styles.addPhotoText}>Add photo</Text>
-                  </>
+                  <Ionicons name="add" size={20} color="#FFFFFF" />
                 )}
               </Pressable>
             )}
@@ -357,26 +355,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   addPhotoBtn: {
-    flexDirection: "row",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#2563EB",
     alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 4,
-    borderWidth: 1,
-    borderColor: "#2563EB",
-    borderStyle: "dashed",
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-  },
-  addPhotoBtnEmpty: {
-    alignSelf: "stretch",
     justifyContent: "center",
-    paddingVertical: 14,
-  },
-  addPhotoText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#2563EB",
+    alignSelf: "flex-start",
   },
   ratingSection: { marginBottom: 0 },
   ratingQuestion: {

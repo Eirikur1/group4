@@ -198,17 +198,10 @@ export default function AddWaterSource({
           style={styles.uploadArea}
           onPress={pickImages}
           disabled={uploading}
-          accessibilityLabel="Choose file to upload"
+          accessibilityLabel="Add photos"
         >
-          <View style={styles.uploadIconWrap}>
-            <Ionicons name="cloud-upload-outline" size={40} color="#9CA3AF" />
-          </View>
-          <Text style={styles.uploadHint}>
-            Tap{" "}
-            <Text style={styles.uploadLink}>Choose file</Text>
-            {" "}to pick photos from your library
-          </Text>
-          <Text style={styles.uploadFormats}>png, jpeg</Text>
+          <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+          <Text style={styles.uploadAreaText}>Add photos</Text>
         </Pressable>
       </View>
 
@@ -328,42 +321,22 @@ const styles = StyleSheet.create({
     right: 4,
   },
   uploadArea: {
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    backgroundColor: "#F9FAFB",
-    paddingVertical: 32,
-    paddingHorizontal: 20,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#2563EB",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     marginTop: 10,
   },
-  uploadIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  uploadHint: {
+  uploadAreaText: {
     fontSize: 14,
-    color: "#374151",
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  uploadLink: {
+    fontWeight: "600",
     color: "#2563EB",
-    textDecorationLine: "underline",
-    fontWeight: "500",
-  },
-  uploadFormats: {
-    fontSize: 12,
-    color: "#9CA3AF",
   },
   submitButton: {
     backgroundColor: "#2563EB",
