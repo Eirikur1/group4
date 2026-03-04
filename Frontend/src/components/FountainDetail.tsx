@@ -19,10 +19,6 @@ interface FountainDetailProps {
 }
 
 const RATING_EMOJIS = ["😖", "😕", "😐", "🙂", "😍"];
-const PLACEHOLDER_IMAGES = [
-  require("../../assets/images/b741f146d496c7d4f5d41f27685cd7b5.jpg"),
-  require("../../assets/images/b949af6e1c695e801c5a0013a98256df.jpg"),
-];
 
 const fountainRegion = (f: Fountain) => ({
   latitude: f.latitude,
@@ -39,7 +35,6 @@ export default function FountainDetail({ fountain }: FountainDetailProps) {
       : fountain.imageUrl
         ? [fountain.imageUrl]
         : [];
-  const localImages = PLACEHOLDER_IMAGES;
   const img1 = urls[0];
   const img2 = urls[1];
   // Reset error state when fountain changes so a failed image on one location
@@ -107,18 +102,26 @@ export default function FountainDetail({ fountain }: FountainDetailProps) {
             </View>
           </View>
           <View style={styles.imageRow}>
-            <Image
-              source={img1 && !img1Error ? { uri: img1 } : localImages[0]}
-              style={styles.galleryImage}
-              resizeMode="cover"
-              onError={() => setImg1Error(true)}
-            />
-            <Image
-              source={img2 && !img2Error ? { uri: img2 } : localImages[1]}
-              style={styles.galleryImage}
-              resizeMode="cover"
-              onError={() => setImg2Error(true)}
-            />
+            {img1 && !img1Error ? (
+              <Image
+                source={{ uri: img1 }}
+                style={styles.galleryImage}
+                resizeMode="cover"
+                onError={() => setImg1Error(true)}
+              />
+            ) : (
+              <View style={[styles.galleryImage, styles.galleryPlaceholder]} />
+            )}
+            {img2 && !img2Error ? (
+              <Image
+                source={{ uri: img2 }}
+                style={styles.galleryImage}
+                resizeMode="cover"
+                onError={() => setImg2Error(true)}
+              />
+            ) : (
+              <View style={[styles.galleryImage, styles.galleryPlaceholder]} />
+            )}
           </View>
           {(fountain.description ?? "").trim() ? (
             <Text style={styles.shortDescription} numberOfLines={3}>
@@ -263,6 +266,9 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 12,
     overflow: "hidden",
+  },
+  galleryPlaceholder: {
+    backgroundColor: "#E5E7EB",
   },
   ratingSection: { marginBottom: 0 },
   ratingQuestion: {
