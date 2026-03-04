@@ -60,7 +60,21 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
   // Only user-uploaded fountains (UUID string IDs) support adding photos.
   const canAddPhotos = typeof fountain.id === "string" && !!onPhotosAdded;
 
-  const handleAddPhoto = useCallback(async () => {
+  const uploadUris = useCallback(async (uris: string[]) => {
+    if (!uris.length) return;
+    setAddingPhoto(true);
+    try {
+      const newUrls = await uploadFountainPhotos(uris);
+      const updated = await addPhotosToWaterSource(String(fountain.id), newUrls);
+      if (updated) onPhotosAdded?.(updated);
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Could not add photos.");
+    } finally {
+      setAddingPhoto(false);
+    }
+  }, [fountain.id, onPhotosAdded]);
+
+  const addFromLibrary = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission needed", "Allow access to your photos to add images.");
@@ -71,18 +85,33 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
       allowsMultipleSelection: true,
       quality: 0.8,
     });
-    if (result.canceled || !result.assets?.length) return;
-    setAddingPhoto(true);
-    try {
-      const newUrls = await uploadFountainPhotos(result.assets.map((a) => a.uri));
-      const updated = await addPhotosToWaterSource(String(fountain.id), newUrls);
-      if (updated) onPhotosAdded?.(updated);
-    } catch (e) {
-      Alert.alert("Upload failed", e instanceof Error ? e.message : "Could not add photos.");
-    } finally {
-      setAddingPhoto(false);
+    if (!result.canceled && result.assets?.length) {
+      await uploadUris(result.assets.map((a) => a.uri));
     }
-  }, [fountain.id, onPhotosAdded]);
+  }, [uploadUris]);
+
+  const addFromCamera = useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow camera access to take photos.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.length) {
+      await uploadUris(result.assets.map((a) => a.uri));
+    }
+  }, [uploadUris]);
+
+  const handleAddPhoto = useCallback(() => {
+    Alert.alert("Add photo", undefined, [
+      { text: "Take photo", onPress: addFromCamera },
+      { text: "Choose from library", onPress: addFromLibrary },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [addFromCamera, addFromLibrary]);
 
   return (
     <ScrollView

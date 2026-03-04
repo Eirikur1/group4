@@ -38,15 +38,13 @@ export default function AddWaterSource({
   const [uploading, setUploading] = useState(false);
 
   const [permission, requestPermission] = ImagePicker.useMediaLibraryPermissions();
+  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
 
-  const pickImages = async () => {
+  const addFromLibrary = async () => {
     if (permission?.status !== "granted") {
       const { status } = await requestPermission();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission needed",
-          "Allow access to your photos to upload images for the water source."
-        );
+        Alert.alert("Permission needed", "Allow access to your photos to upload images.");
         return;
       }
     }
@@ -56,11 +54,33 @@ export default function AddWaterSource({
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.length) {
-      setSelectedUris((prev) => [
-        ...prev,
-        ...result.assets.map((a) => a.uri),
-      ]);
+      setSelectedUris((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
     }
+  };
+
+  const addFromCamera = async () => {
+    if (cameraPermission?.status !== "granted") {
+      const { status } = await requestCameraPermission();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Allow camera access to take photos.");
+        return;
+      }
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.length) {
+      setSelectedUris((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
+    }
+  };
+
+  const pickImages = () => {
+    Alert.alert("Add photo", undefined, [
+      { text: "Take photo", onPress: addFromCamera },
+      { text: "Choose from library", onPress: addFromLibrary },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const removeImage = (index: number) => {
