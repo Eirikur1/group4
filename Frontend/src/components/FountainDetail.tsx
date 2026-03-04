@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -42,6 +42,8 @@ export default function FountainDetail({ fountain }: FountainDetailProps) {
   const localImages = PLACEHOLDER_IMAGES;
   const img1 = urls[0];
   const img2 = urls[1];
+  const [img1Error, setImg1Error] = useState(false);
+  const [img2Error, setImg2Error] = useState(false);
 
   return (
     <ScrollView
@@ -98,14 +100,16 @@ export default function FountainDetail({ fountain }: FountainDetailProps) {
           </View>
           <View style={styles.imageRow}>
             <Image
-              source={img1 ? { uri: img1 } : localImages[0]}
+              source={img1 && !img1Error ? { uri: img1 } : localImages[0]}
               style={styles.galleryImage}
               resizeMode="cover"
+              onError={() => setImg1Error(true)}
             />
             <Image
-              source={img2 ? { uri: img2 } : localImages[1]}
+              source={img2 && !img2Error ? { uri: img2 } : localImages[1]}
               style={styles.galleryImage}
               resizeMode="cover"
+              onError={() => setImg2Error(true)}
             />
           </View>
           {(fountain.description ?? "").trim() ? (
