@@ -172,10 +172,9 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                  snapToInterval={ITEM_W + IMG_GAP}
-                  decelerationRate="fast"
-                  contentContainerStyle={{ gap: IMG_GAP, paddingRight: CAROUSEL_W - ITEM_W - IMG_GAP }}
-                  style={{ width: CAROUSEL_W }}
+                snapToInterval={ITEM_W + IMG_GAP}
+                decelerationRate="fast"
+                style={{ width: CAROUSEL_W }}
                 onMomentumScrollEnd={(e) => {
                   const idx = Math.round(
                     e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP)
@@ -187,13 +186,13 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
                   <Image
                     key={`${uri}-${i}`}
                     source={{ uri }}
-                    style={[styles.carouselImage, { width: ITEM_W }]}
+                    style={[styles.carouselImage, { width: ITEM_W, marginRight: IMG_GAP }]}
                     resizeMode="cover"
                   />
                 ))}
                 {canAddPhotos && (
                   <Pressable
-                    style={[styles.carouselImage, styles.addPhotoSlide, { width: ITEM_W }]}
+                    style={[styles.carouselImage, styles.addPhotoSlide, { width: ITEM_W, marginRight: CAROUSEL_W - ITEM_W }]}
                     onPress={handleAddPhoto}
                     disabled={addingPhoto}
                     accessibilityLabel="Add photo"
