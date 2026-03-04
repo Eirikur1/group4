@@ -137,60 +137,61 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
               )}
             </View>
           </View>
-          {/* Image carousel + add button */}
-          <View style={styles.imageBlock}>
-            {urls.length > 0 ? (
-              <View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  snapToInterval={ITEM_W + IMG_GAP}
-                  decelerationRate="fast"
-                  contentContainerStyle={{ gap: IMG_GAP }}
-                  style={{ width: CAROUSEL_W }}
-                  onMomentumScrollEnd={(e) => {
-                    const idx = Math.round(
-                      e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP)
-                    );
-                    setCarouselIndex(idx);
-                  }}
-                >
-                  {urls.map((uri, i) => (
-                    <Image
-                      key={`${uri}-${i}`}
-                      source={{ uri }}
-                      style={[styles.carouselImage, { width: ITEM_W }]}
-                      resizeMode="cover"
+          {/* Image carousel — last tile is the add-photo button when allowed */}
+          {(urls.length > 0 || canAddPhotos) && (
+            <View style={styles.imageBlock}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={ITEM_W + IMG_GAP}
+                decelerationRate="fast"
+                contentContainerStyle={{ gap: IMG_GAP }}
+                style={{ width: CAROUSEL_W }}
+                onMomentumScrollEnd={(e) => {
+                  const idx = Math.round(
+                    e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP)
+                  );
+                  setCarouselIndex(idx);
+                }}
+              >
+                {urls.map((uri, i) => (
+                  <Image
+                    key={`${uri}-${i}`}
+                    source={{ uri }}
+                    style={[styles.carouselImage, { width: ITEM_W }]}
+                    resizeMode="cover"
+                  />
+                ))}
+                {canAddPhotos && (
+                  <Pressable
+                    style={[styles.carouselImage, styles.addPhotoSlide, { width: ITEM_W }]}
+                    onPress={handleAddPhoto}
+                    disabled={addingPhoto}
+                    accessibilityLabel="Add photo"
+                  >
+                    {addingPhoto ? (
+                      <ActivityIndicator color="#3A9BDC" />
+                    ) : (
+                      <>
+                        <Ionicons name="add" size={28} color="#3A9BDC" />
+                        <Text style={styles.addPhotoSlideText}>Add photo</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
+              </ScrollView>
+              {urls.length > 1 && (
+                <View style={styles.dotsRow}>
+                  {urls.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[styles.dot, i === carouselIndex && styles.dotActive]}
                     />
                   ))}
-                </ScrollView>
-                {urls.length > 1 && (
-                  <View style={styles.dotsRow}>
-                    {urls.map((_, i) => (
-                      <View
-                        key={i}
-                        style={[styles.dot, i === carouselIndex && styles.dotActive]}
-                      />
-                    ))}
-                  </View>
-                )}
-              </View>
-            ) : null}
-            {canAddPhotos && (
-              <Pressable
-                style={styles.addPhotoBtn}
-                onPress={handleAddPhoto}
-                disabled={addingPhoto}
-                accessibilityLabel="Add photo"
-              >
-                {addingPhoto ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="add" size={20} color="#FFFFFF" />
-                )}
-              </Pressable>
-            )}
-          </View>
+                </View>
+              )}
+            </View>
+          )}
           {(fountain.description ?? "").trim() ? (
             <Text style={styles.shortDescription} numberOfLines={3}>
               {fountain.description!.trim()}
@@ -354,14 +355,19 @@ const styles = StyleSheet.create({
   dotActive: {
     backgroundColor: "#3A9BDC",
   },
-  addPhotoBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#3A9BDC",
+  addPhotoSlide: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#3A9BDC",
+    backgroundColor: "#F0F8FE",
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-start",
+    gap: 6,
+  },
+  addPhotoSlideText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#3A9BDC",
   },
   ratingSection: { marginBottom: 0 },
   ratingQuestion: {
