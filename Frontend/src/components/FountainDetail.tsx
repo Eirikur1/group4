@@ -172,10 +172,10 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                snapToInterval={ITEM_W + IMG_GAP}
-                decelerationRate="fast"
-                contentContainerStyle={{ gap: IMG_GAP }}
-                style={{ width: CAROUSEL_W }}
+                  snapToInterval={ITEM_W + IMG_GAP}
+                  decelerationRate="fast"
+                  contentContainerStyle={{ gap: IMG_GAP, paddingRight: CAROUSEL_W - ITEM_W }}
+                  style={{ width: CAROUSEL_W }}
                 onMomentumScrollEnd={(e) => {
                   const idx = Math.round(
                     e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP)
