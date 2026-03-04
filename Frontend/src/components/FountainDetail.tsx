@@ -23,6 +23,9 @@ import { addPhotosToWaterSource } from "../lib/waterSources";
 const SCREEN_W = Dimensions.get("window").width;
 // Account for mapBlock margins (8), padding (13), and belowMap margins (6)
 const CAROUSEL_W = SCREEN_W - 8 * 2 - 13 * 2 - 6 * 2;
+const IMG_GAP = 8;
+// Show 2.5 images at once so the third peeks, hinting there are more
+const ITEM_W = (CAROUSEL_W - IMG_GAP * 2) / 2.5;
 
 interface FountainDetailProps {
   fountain: Fountain;
@@ -140,12 +143,14 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
               <View>
                 <ScrollView
                   horizontal
-                  pagingEnabled
                   showsHorizontalScrollIndicator={false}
+                  snapToInterval={ITEM_W + IMG_GAP}
+                  decelerationRate="fast"
+                  contentContainerStyle={{ gap: IMG_GAP }}
                   style={{ width: CAROUSEL_W }}
                   onMomentumScrollEnd={(e) => {
                     const idx = Math.round(
-                      e.nativeEvent.contentOffset.x / CAROUSEL_W
+                      e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP)
                     );
                     setCarouselIndex(idx);
                   }}
@@ -154,7 +159,7 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
                     <Image
                       key={`${uri}-${i}`}
                       source={{ uri }}
-                      style={[styles.carouselImage, { width: CAROUSEL_W }]}
+                      style={[styles.carouselImage, { width: ITEM_W }]}
                       resizeMode="cover"
                     />
                   ))}
@@ -178,13 +183,11 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
                 disabled={addingPhoto}
               >
                 {addingPhoto ? (
-                  <ActivityIndicator color="#2563EB" />
+                  <ActivityIndicator size="small" color="#2563EB" />
                 ) : (
                   <>
-                    <Ionicons name="add" size={22} color="#2563EB" />
-                    <Text style={styles.addPhotoText}>
-                      {urls.length === 0 ? "Add photo" : "Add photo"}
-                    </Text>
+                    <Ionicons name="add-circle-outline" size={16} color="#2563EB" />
+                    <Text style={styles.addPhotoText}>Add photo</Text>
                   </>
                 )}
               </Pressable>
@@ -330,24 +333,24 @@ const styles = StyleSheet.create({
   },
   imageBlock: {
     marginBottom: 8,
-    gap: 8,
+    gap: 6,
   },
   carouselImage: {
-    height: 180,
-    borderRadius: 12,
+    height: 140,
+    borderRadius: 10,
     overflow: "hidden",
   },
   dotsRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 6,
-    marginTop: 8,
+    gap: 5,
+    marginTop: 6,
   },
   dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: "#D1D5DB",
   },
   dotActive: {
@@ -356,19 +359,22 @@ const styles = StyleSheet.create({
   addPhotoBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderWidth: 1.5,
+    alignSelf: "flex-start",
+    gap: 4,
+    borderWidth: 1,
     borderColor: "#2563EB",
     borderStyle: "dashed",
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
   addPhotoBtnEmpty: {
-    paddingVertical: 18,
+    alignSelf: "stretch",
+    justifyContent: "center",
+    paddingVertical: 14,
   },
   addPhotoText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     color: "#2563EB",
   },
