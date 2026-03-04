@@ -42,8 +42,16 @@ export default function FountainDetail({ fountain }: FountainDetailProps) {
   const localImages = PLACEHOLDER_IMAGES;
   const img1 = urls[0];
   const img2 = urls[1];
+  // Reset error state when fountain changes so a failed image on one location
+  // doesn't permanently hide images on all subsequent locations.
   const [img1Error, setImg1Error] = useState(false);
   const [img2Error, setImg2Error] = useState(false);
+  const prevFountainId = React.useRef(fountain.id);
+  if (prevFountainId.current !== fountain.id) {
+    prevFountainId.current = fountain.id;
+    if (img1Error) setImg1Error(false);
+    if (img2Error) setImg2Error(false);
+  }
 
   return (
     <ScrollView
