@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -51,14 +51,22 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
 
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [addingPhoto, setAddingPhoto] = useState(false);
+
+  // Only user-uploaded fountains (UUID string IDs) support adding photos.
+  const canAddPhotos = typeof fountain.id === "string" && !!onPhotosAdded;
+
+  const totalSlides = urls.length + (canAddPhotos ? 1 : 0);
+  // Explicit snap offsets so the ScrollView can only land on real slide positions
+  const snapOffsets = useMemo(
+    () => Array.from({ length: totalSlides }, (_, i) => i * (ITEM_W + IMG_GAP)),
+    [totalSlides]
+  );
+
   const prevFountainId = useRef(fountain.id);
   if (prevFountainId.current !== fountain.id) {
     prevFountainId.current = fountain.id;
     setCarouselIndex(0);
   }
-
-  // Only user-uploaded fountains (UUID string IDs) support adding photos.
-  const canAddPhotos = typeof fountain.id === "string" && !!onPhotosAdded;
 
   const uploadUris = useCallback(async (uris: string[]) => {
     if (!uris.length) return;
@@ -172,8 +180,9 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                snapToInterval={ITEM_W + IMG_GAP}
+                snapToOffsets={snapOffsets}
                 decelerationRate="fast"
+                bounces={false}
                 style={{ width: CAROUSEL_W }}
                 onMomentumScrollEnd={(e) => {
                   const idx = Math.round(
