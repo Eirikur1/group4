@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import { supabase } from "./supabase";
 
@@ -7,8 +8,9 @@ const BUCKET = "fountain-photos";
  * Upload a single image from a local URI (e.g. from expo-image-picker) to
  * Supabase Storage and return the public URL.
  *
- * Images are converted to JPEG before upload so HEIC and other formats
- * (common on iPhone) are always readable.
+ * Uses expo-image-manipulator to convert to JPEG (handles HEIC from iPhone),
+ * then reads via expo-file-system as base64 to avoid the Expo Go bug where
+ * fetch(localUri).blob() always returns an empty blob.
  */
 export async function uploadFountainPhoto(localUri: string): Promise<string> {
   if (!supabase) {
@@ -17,23 +19,30 @@ export async function uploadFountainPhoto(localUri: string): Promise<string> {
     );
   }
 
-  // Convert to JPEG so HEIC/HEIF and other formats work reliably on all platforms.
+  // Convert to JPEG — handles HEIC/HEIF and normalises other formats.
   const manipulated = await ImageManipulator.manipulateAsync(
     localUri,
     [],
     { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
   );
 
-  const response = await fetch(manipulated.uri);
-  if (!response.ok) {
-    throw new Error(`Failed to read image: ${response.status}`);
+  // Read file as base64 — reliable in Expo Go where fetch().blob() returns empty.
+  const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  // Decode base64 to raw bytes for Supabase upload.
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
   }
-  const blob = await response.blob();
+
   const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
 
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
 
   if (error) {
     if (error.message?.toLowerCase().includes("bucket") && error.message?.toLowerCase().includes("not found")) {
