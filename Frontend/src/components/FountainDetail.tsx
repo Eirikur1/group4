@@ -20,6 +20,7 @@ import { darkMapStyle } from "../constants/mapStyles";
 import { openDirections } from "../utils/directions";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
 import { addPhotosToWaterSource } from "../lib/waterSources";
+import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
 
 const SCREEN_W = Dimensions.get("window").width;
 // Account for mapBlock margins (8), padding (13), and belowMap margins (6)
@@ -31,6 +32,7 @@ const ITEM_W = (CAROUSEL_W - IMG_GAP * 2) / 2.5;
 interface FountainDetailProps {
   fountain: Fountain;
   onPhotosAdded?: (updated: Fountain) => void;
+  onSavedChanged?: () => void;
 }
 
 const RATING_EMOJIS = ["😖", "😕", "😐", "🙂", "😍"];
@@ -73,7 +75,11 @@ function PhotoTile({ uri, width, marginRight }: { uri: string; width: number; ma
   );
 }
 
-export default function FountainDetail({ fountain, onPhotosAdded }: FountainDetailProps) {
+export default function FountainDetail({
+  fountain,
+  onPhotosAdded,
+  onSavedChanged,
+}: FountainDetailProps) {
   const urls: string[] =
     (fountain.images?.length ?? 0) > 0
       ? fountain.images!
@@ -83,11 +89,32 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
 
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [addingPhoto, setAddingPhoto] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
 
   // Only user-uploaded fountains (UUID string IDs) support adding photos.
   const canAddPhotos = typeof fountain.id === "string" && !!onPhotosAdded;
 
   const totalSlides = urls.length + (canAddPhotos ? 1 : 0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (typeof fountain.id !== "string") {
+        setSaved(false);
+        return;
+      }
+      try {
+        const value = await isLocationSaved(fountain.id);
+        if (!cancelled) setSaved(value);
+      } catch {
+        if (!cancelled) setSaved(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fountain.id]);
 
   // The add-photo slide has marginRight = ITEM_W/2, so content ends
   // ITEM_W/2 past its right edge. The final snap positions the last real
@@ -168,6 +195,29 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
     ]);
   }, [addFromCamera, addFromLibrary]);
 
+  const handleToggleSaved = useCallback(async () => {
+    if (typeof fountain.id !== "string") {
+      Alert.alert(
+        "Not supported",
+        "Only database-backed fountains can be saved right now."
+      );
+      return;
+    }
+    setSavingLocation(true);
+    try {
+      const next = await toggleSavedLocation(fountain.id);
+      setSaved(next);
+      onSavedChanged?.();
+    } catch (e) {
+      Alert.alert(
+        "Save failed",
+        e instanceof Error ? e.message : "Could not update saved location."
+      );
+    } finally {
+      setSavingLocation(false);
+    }
+  }, [fountain.id, onSavedChanged]);
+
   return (
     <ScrollView
       style={styles.container}
@@ -219,6 +269,25 @@ export default function FountainDetail({ fountain, onPhotosAdded }: FountainDeta
                   <Ionicons name="star" size={18} color="#FFD700" />
                 </View>
               )}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.saveButton,
+                  pressed && styles.saveButtonPressed,
+                ]}
+                onPress={handleToggleSaved}
+                disabled={savingLocation}
+                accessibilityLabel={saved ? "Remove from saved" : "Save location"}
+              >
+                {savingLocation ? (
+                  <ActivityIndicator size="small" color="#2E7D32" />
+                ) : (
+                  <Ionicons
+                    name={saved ? "bookmark" : "bookmark-outline"}
+                    size={20}
+                    color="#2E7D32"
+                  />
+                )}
+              </Pressable>
             </View>
           </View>
           {/* Image carousel — last tile is the add-photo button when allowed */}
@@ -396,6 +465,18 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   titleRight: { alignItems: "flex-end", minWidth: 80 },
+  saveButton: {
+    marginTop: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#D9EAD3",
+    backgroundColor: "#F6FBF5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveButtonPressed: { opacity: 0.8 },
   category: {
     fontSize: 14,
     color: "#666666",

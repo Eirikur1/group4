@@ -8,11 +8,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 interface ProfileMenuProps {
   onClose?: () => void;
+  onOpenSaved?: () => void;
 }
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-export default function ProfileMenu({ onClose }: ProfileMenuProps) {
+export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) {
   const navigation = useNavigation<NavProp>();
 
   const handleLoginClick = () => {
@@ -45,7 +46,7 @@ export default function ProfileMenu({ onClose }: ProfileMenuProps) {
           icon={<Ionicons name="pricetag" size={20} color="#333" />}
           title="Saved"
           subtitle="Find Saved Locations"
-          onClick={() => {}}
+          onClick={() => onOpenSaved?.()}
         />
         <MenuItem
           icon={<Ionicons name="settings" size={20} color="#333" />}

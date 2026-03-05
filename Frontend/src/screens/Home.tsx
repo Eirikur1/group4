@@ -11,6 +11,7 @@ import {
   Platform,
   UIManager,
   Keyboard,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
@@ -27,9 +28,10 @@ import { mockFountains } from "../constants/mockFountains";
 import { distanceMeters, formatDistance } from "../utils/distance";
 import { fetchWaterFountains } from "../utils/overpass";
 import { fetchUserWaterSources } from "../lib/waterSources";
+import { fetchSavedLocations } from "../lib/savedLocations";
 import type { Fountain } from "../types/fountain";
 
-type SheetContent = "list" | "detail" | "profile" | "addSource";
+type SheetContent = "list" | "detail" | "profile" | "addSource" | "saved";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -38,6 +40,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 export default function Home() {
   const [fountains, setFountains] = useState<Fountain[]>(mockFountains);
   const [userFountains, setUserFountains] = useState<Fountain[]>([]);
+  const [savedFountains, setSavedFountains] = useState<Fountain[]>([]);
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -120,6 +123,19 @@ export default function Home() {
   const refetchUserFountains = useCallback(async () => {
     const list = await fetchUserWaterSources();
     setUserFountains(list);
+  }, []);
+
+  const refetchSavedFountains = useCallback(async () => {
+    try {
+      const list = await fetchSavedLocations();
+      setSavedFountains(list);
+    } catch (e) {
+      Alert.alert(
+        "Saved locations unavailable",
+        e instanceof Error ? e.message : "Could not fetch saved locations."
+      );
+      setSavedFountains([]);
+    }
   }, []);
 
   const handleUploadSuccess = useCallback(
@@ -256,6 +272,12 @@ export default function Home() {
     setCurrentSnap(1);
   }, []);
 
+  const handleOpenSaved = useCallback(async () => {
+    await refetchSavedFountains();
+    setSheetContent("saved");
+    setCurrentSnap(1);
+  }, [refetchSavedFountains]);
+
   const handleSearchSelectFountain = useCallback(
     (fountain: Fountain) => {
       setSearchFocused(false);
@@ -377,9 +399,19 @@ export default function Home() {
         index={currentSnap}
         onSnapChange={handleSheetSnapChange}
         onBackdropPress={handleBackdropPress}
-        title={sheetContent === "list" ? "Closest Fountains" : undefined}
+        title={
+          sheetContent === "list"
+            ? "Closest Fountains"
+            : sheetContent === "saved"
+              ? "Saved Locations"
+              : undefined
+        }
         subtitle={
-          sheetContent === "list" ? "Find the closest water fountains" : undefined
+          sheetContent === "list"
+            ? "Find the closest water fountains"
+            : sheetContent === "saved"
+              ? "Your saved refill stations"
+              : undefined
         }
       >
         {sheetContent === "list" && (
@@ -415,10 +447,38 @@ export default function Home() {
                 prev.map((f) => (f.id === updated.id ? updated : f))
               );
             }}
+            onSavedChanged={refetchSavedFountains}
           />
+        )}
+        {sheetContent === "saved" && (
+          <View style={styles.list}>
+            <ScrollView
+              style={styles.listItems}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {savedFountains.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No saved locations yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Open a fountain and tap the bookmark icon to save it.
+                  </Text>
+                </View>
+              ) : (
+                savedFountains.map((fountain) => (
+                  <FountainCard
+                    key={fountain.id}
+                    fountain={fountain}
+                    onClick={() => handleFountainClick(fountain)}
+                  />
+                ))
+              )}
+            </ScrollView>
+          </View>
         )}
         {sheetContent === "profile" && (
           <ProfileMenu
+            onOpenSaved={handleOpenSaved}
             onClose={() => {
               Keyboard.dismiss();
               pendingContentRef.current = null;
@@ -555,4 +615,21 @@ const styles = StyleSheet.create({
   iconImage: { width: 22, height: 22 },
   list: { flex: 1, minHeight: 200 },
   listItems: { flex: 1 },
+  emptyState: {
+    paddingTop: 24,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1B1B1B",
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#666666",
+    textAlign: "center",
+    lineHeight: 20,
+  },
 });
