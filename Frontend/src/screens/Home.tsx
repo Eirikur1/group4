@@ -241,8 +241,8 @@ export default function Home() {
 
   const handleAddLocationPress = useCallback(() => {
     if (!pendingAddCoordinate) return;
-    setSheetContent("addSource");
-    setCurrentSnap(1);
+    // Tapping the add-pin button now cancels/removes the pin.
+    setPendingAddCoordinate(null);
   }, [pendingAddCoordinate]);
 
   const handleAddSourceClose = useCallback(() => {

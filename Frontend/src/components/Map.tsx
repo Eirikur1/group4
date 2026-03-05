@@ -74,6 +74,19 @@ export default function Map({
     }
   }, [region]);
 
+  useEffect(() => {
+    if (!pendingAddCoordinate || !mapRef.current) return;
+    mapRef.current.animateToRegion(
+      {
+        latitude: pendingAddCoordinate.latitude,
+        longitude: pendingAddCoordinate.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      },
+      250,
+    );
+  }, [pendingAddCoordinate]);
+
   const initialRegion = region
     ? {
         ...DEFAULT_REGION,
