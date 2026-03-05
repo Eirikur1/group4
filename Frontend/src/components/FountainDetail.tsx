@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
+  TextInput,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -22,7 +24,11 @@ import type { Fountain } from "../types/fountain";
 import { darkMapStyle } from "../constants/mapStyles";
 import { openDirections } from "../utils/directions";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
-import { addPhotosToWaterSource } from "../lib/waterSources";
+import {
+  addPhotosToWaterSource,
+  updateWaterSource,
+  deleteWaterSource,
+} from "../lib/waterSources";
 import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
 import { submitRating, getAverageRating } from "../lib/ratings";
 import { useAuth } from "../contexts/AuthContext";
@@ -47,6 +53,10 @@ interface FountainDetailProps {
   onSavedChanged?: () => void;
   /** Called after user submits a rating so parent can update fountain with new average */
   onRatingChanged?: (updated: Fountain) => void;
+  /** Called after the location is updated (name edit) so parent can refresh */
+  onFountainUpdated?: (updated: Fountain) => void;
+  /** Called after the location is deleted so parent can refresh list and e.g. go back */
+  onFountainDeleted?: () => void;
 }
 
 const fountainRegion = (f: Fountain) => ({
@@ -77,9 +87,11 @@ export default function FountainDetail({
   onPhotosAdded,
   onSavedChanged,
   onRatingChanged,
+  onFountainUpdated,
+  onFountainDeleted,
 }: FountainDetailProps) {
   const navigation = useNavigation<NavProp>();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, user, session } = useAuth();
   const urls: string[] =
     (fountain.images?.length ?? 0) > 0
       ? fountain.images!
@@ -90,9 +102,22 @@ export default function FountainDetail({
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [addingPhoto, setAddingPhoto] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState(fountain.name);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  // Only user-uploaded fountains (UUID string IDs) support adding photos.
-  const canAddPhotos = typeof fountain.id === "string" && !!onPhotosAdded;
+  // Creator can add photos; if there is no creator (legacy location), any signed-in user can add.
+  const isOwner =
+    typeof fountain.id === "string" &&
+    !!user &&
+    !!fountain.createdBy &&
+    fountain.createdBy.id === user.id;
+  const hasNoCreator = typeof fountain.id === "string" && !fountain.createdBy;
+  const canAddPhotos =
+    typeof fountain.id === "string" &&
+    !!onPhotosAdded &&
+    (isOwner || (isSignedIn && hasNoCreator));
 
   const totalSlides = urls.length + (canAddPhotos ? 1 : 0);
 
@@ -149,7 +174,11 @@ export default function FountainDetail({
     setAddingPhoto(true);
     try {
       const newUrls = await uploadFountainPhotos(uris);
-      const updated = await addPhotosToWaterSource(String(fountain.id), newUrls);
+      const updated = await addPhotosToWaterSource(
+        String(fountain.id),
+        newUrls,
+        session?.access_token
+      );
       if (updated) onPhotosAdded(updated);
     } catch (e) {
       onPhotosAdded({ ...fountain, images: previousImages });
@@ -254,6 +283,61 @@ export default function FountainDetail({
     },
     [canRate, fountain, onRatingChanged]
   );
+
+  const handleDelete = useCallback(() => {
+    const id = fountain.id;
+    if (typeof id !== "string") return;
+    Alert.alert(
+      "Delete location?",
+      `Remove "${fountain.name}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteWaterSource(id, session?.access_token);
+              onFountainDeleted?.();
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert(
+                "Delete failed",
+                e instanceof Error ? e.message : "Could not delete location."
+              );
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [fountain.id, fountain.name, session?.access_token, onFountainDeleted, navigation]);
+
+  const handleSaveEdit = useCallback(async () => {
+    const name = editName.trim();
+    if (!name || typeof fountain.id !== "string") return;
+    setSavingEdit(true);
+    try {
+      const updated = await updateWaterSource(
+        fountain.id,
+        { name },
+        session?.access_token
+      );
+      if (updated) {
+        onFountainUpdated?.(updated);
+        setEditModalVisible(false);
+      }
+    } catch (e) {
+      Alert.alert(
+        "Update failed",
+        e instanceof Error ? e.message : "Could not update location."
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [fountain.id, editName, session?.access_token, onFountainUpdated]);
 
   return (
     <ScrollView
@@ -402,6 +486,44 @@ export default function FountainDetail({
               <Ionicons name="navigate" size={20} color="#FFFFFF" />
               <Text style={styles.directionsButtonText}>Get directions</Text>
             </Pressable>
+            {isOwner && (
+              <View style={styles.ownerActionsRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.ownerActionButton,
+                    pressed && styles.ownerActionButtonPressed,
+                  ]}
+                  onPress={() => {
+                    setEditName(fountain.name);
+                    setEditModalVisible(true);
+                  }}
+                  disabled={deleting}
+                  accessibilityLabel="Edit location"
+                >
+                  <Ionicons name="pencil" size={18} color="#3A9BDC" />
+                  <Text style={styles.ownerActionText}>Edit</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.ownerActionButton,
+                    styles.ownerActionButtonDanger,
+                    pressed && styles.ownerActionButtonPressed,
+                  ]}
+                  onPress={handleDelete}
+                  disabled={deleting}
+                  accessibilityLabel="Delete location"
+                >
+                  {deleting ? (
+                    <ActivityIndicator size="small" color="#DC2626" />
+                  ) : (
+                    <>
+                      <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                      <Text style={[styles.ownerActionText, styles.ownerActionTextDanger]}>Delete</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            )}
           </View>
 
           <View style={styles.contentRest}>
@@ -419,8 +541,58 @@ export default function FountainDetail({
               </View>
             </View>
           </View>
+
+          {typeof fountain.id === "string" && (
+            <Text style={styles.addedByFooter} numberOfLines={1}>
+              Added by {fountain.createdBy?.displayName ?? "Someone"}
+            </Text>
+          )}
         </View>
       </View>
+
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setEditModalVisible(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Edit location name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Location name"
+              placeholderTextColor="#9CA3AF"
+              editable={!savingEdit}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setEditModalVisible(false)}
+                disabled={savingEdit}
+              >
+                <Text style={styles.modalButtonCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonSave]}
+                onPress={handleSaveEdit}
+                disabled={savingEdit || !editName.trim()}
+              >
+                {savingEdit ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.modalButtonSaveText}>Save</Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -468,6 +640,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     paddingTop: 12,
     paddingBottom: 4,
+  },
+  addedByFooter: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 20,
+    marginBottom: 8,
+    paddingHorizontal: 6,
   },
   shortDescription: {
     fontSize: 14,
@@ -641,4 +820,54 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
+  ownerActionsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  ownerActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#3A9BDC",
+  },
+  ownerActionButtonPressed: { opacity: 0.8 },
+  ownerActionButtonDanger: { borderColor: "#DC2626" },
+  ownerActionText: { fontSize: 15, fontWeight: "600", color: "#3A9BDC" },
+  ownerActionTextDanger: { color: "#DC2626" },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 24,
+  },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: "#111", marginBottom: 16 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#111",
+    marginBottom: 20,
+  },
+  modalButtons: { flexDirection: "row", gap: 12, justifyContent: "flex-end" },
+  modalButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 },
+  modalButtonCancel: { backgroundColor: "#f0f0f0" },
+  modalButtonSave: { backgroundColor: "#3A9BDC" },
+  modalButtonCancelText: { fontSize: 15, fontWeight: "600", color: "#333" },
+  modalButtonSaveText: { fontSize: 15, fontWeight: "600", color: "#FFF" },
 });

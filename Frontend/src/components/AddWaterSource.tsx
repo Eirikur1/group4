@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
 import { insertWaterSource } from "../lib/waterSources";
 import type { Fountain } from "../types/fountain";
+import { useAuth } from "../contexts/AuthContext";
 
 interface AddWaterSourceProps {
   latitude: number;
@@ -31,6 +32,7 @@ export default function AddWaterSource({
   onClose,
   onUploadSuccess,
 }: AddWaterSourceProps) {
+  const { session } = useAuth();
   const [title, setTitle] = useState("");
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [selectedUris, setSelectedUris] = useState<string[]>([]);
@@ -108,13 +110,16 @@ export default function AddWaterSource({
       }
       let newFountain;
       try {
-        newFountain = await insertWaterSource({
-          name: title.trim(),
-          latitude,
-          longitude,
-          images: urls,
-          rating: selectedRating != null ? Math.round(selectedRating) : undefined,
-        });
+        newFountain = await insertWaterSource(
+          {
+            name: title.trim(),
+            latitude,
+            longitude,
+            images: urls,
+            rating: selectedRating != null ? Math.round(selectedRating) : undefined,
+          },
+          session?.access_token
+        );
       } catch (apiErr) {
         const msg = apiErr instanceof Error ? apiErr.message : "Request failed";
         throw new Error(`Save location: ${msg}`);

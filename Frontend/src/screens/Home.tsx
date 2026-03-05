@@ -216,8 +216,6 @@ export default function Home() {
 
   const handleUploadSuccess = useCallback(
     (newFountain: Fountain) => {
-      refetchUserFountains();
-      setPendingAddCoordinate(null);
       const withDistance =
         userLocation && !newFountain.distance
           ? {
@@ -232,11 +230,24 @@ export default function Home() {
               ),
             }
           : newFountain;
+      // Add the new fountain to the list immediately so the pin appears right away
+      setUserFountains((prev) => [withDistance, ...prev]);
+      setPendingAddCoordinate(null);
       setSelectedFountain(withDistance);
       setSheetContent("detail");
       setCurrentSnap(1);
+      // Refetch after a short delay so the server has the new row; merge result so we never drop the new pin
+      setTimeout(() => {
+        fetchUserWaterSources().then((list) => {
+          setUserFountains((prev) => {
+            const serverIds = new Set(list.map((f) => f.id));
+            const onlyInPrev = prev.filter((f) => !serverIds.has(f.id));
+            return [...list, ...onlyInPrev];
+          });
+        });
+      }, 800);
     },
-    [refetchUserFountains, userLocation],
+    [userLocation],
   );
 
   const allFountains = useMemo(
@@ -379,6 +390,7 @@ export default function Home() {
     <View style={styles.container}>
       {locationReady && (
       <Map
+        key={`map-${allFountains.length}-${allFountains[0]?.id ?? ""}`}
         fountains={allFountains}
         region={
           userLocation
@@ -543,6 +555,21 @@ export default function Home() {
               setUserFountains((prev) =>
                 prev.map((f) => (f.id === updated.id ? updated : f))
               );
+            }}
+            onFountainUpdated={(updated) => {
+              setSelectedFountain(updated);
+              setUserFountains((prev) =>
+                prev.map((f) => (f.id === updated.id ? updated : f))
+              );
+            }}
+            onFountainDeleted={() => {
+              if (selectedFountain && typeof selectedFountain.id === "string") {
+                setUserFountains((prev) =>
+                  prev.filter((f) => f.id !== selectedFountain.id)
+                );
+                setSelectedFountain(null);
+                setSheetContent(null);
+              }
             }}
             onSavedChanged={refetchSavedFountains}
           />

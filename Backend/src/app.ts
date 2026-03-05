@@ -1,6 +1,15 @@
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
-import { getWaterSources, insertWaterSource, addImagesToWaterSource, type InsertWaterSourceBody } from "./supabase";
+import { getUserIdFromRequest } from "./auth";
+import {
+  getWaterSources,
+  insertWaterSource,
+  addImagesToWaterSource,
+  deleteWaterSource,
+  updateWaterSource,
+  type InsertWaterSourceBody,
+  type UpdateWaterSourceBody,
+} from "./supabase";
 
 const app: Application = express();
 
@@ -27,6 +36,11 @@ app.get("/api/water-sources", async (req: Request, res: Response) => {
 
 app.post("/api/water-sources", async (req: Request, res: Response) => {
   try {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: "Sign in to add a location." });
+      return;
+    }
     const body = req.body as InsertWaterSourceBody;
     if (
       !body?.name ||
@@ -39,7 +53,7 @@ app.post("/api/water-sources", async (req: Request, res: Response) => {
       });
       return;
     }
-    const row = await insertWaterSource(body);
+    const row = await insertWaterSource(body, userId);
     if (!row) {
       res.status(500).json({
         error:
@@ -60,15 +74,20 @@ app.post("/api/water-sources", async (req: Request, res: Response) => {
 
 app.patch("/api/water-sources/:id/images", async (req: Request, res: Response) => {
   try {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: "Sign in to add photos." });
+      return;
+    }
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { images } = req.body as { images?: string[] };
     if (!Array.isArray(images) || images.length === 0) {
       res.status(400).json({ error: "images array required" });
       return;
     }
-    const row = await addImagesToWaterSource(id, images);
+    const row = await addImagesToWaterSource(id, images, userId);
     if (!row) {
-      res.status(500).json({ error: "Failed to update images" });
+      res.status(403).json({ error: "Only the creator can add photos." });
       return;
     }
     res.json(row);
@@ -79,6 +98,51 @@ app.patch("/api/water-sources/:id/images", async (req: Request, res: Response) =
         ? String((e as { message: unknown }).message)
         : "Failed to update images";
     res.status(500).json({ error: message });
+  }
+});
+
+app.patch("/api/water-sources/:id", async (req: Request, res: Response) => {
+  try {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: "Sign in to edit a location." });
+      return;
+    }
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const body = req.body as UpdateWaterSourceBody;
+    const row = await updateWaterSource(id, body, userId);
+    if (!row) {
+      res.status(403).json({ error: "Only the creator can edit this location." });
+      return;
+    }
+    res.json(row);
+  } catch (e: unknown) {
+    console.error("PATCH /api/water-sources/:id", e);
+    const message =
+      e && typeof e === "object" && "message" in e
+        ? String((e as { message: unknown }).message)
+        : "Failed to update location";
+    res.status(500).json({ error: message });
+  }
+});
+
+app.delete("/api/water-sources/:id", async (req: Request, res: Response) => {
+  try {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: "Sign in to delete a location." });
+      return;
+    }
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const ok = await deleteWaterSource(id, userId);
+    if (!ok) {
+      res.status(403).json({ error: "Only the creator can delete this location." });
+      return;
+    }
+    res.status(204).send();
+  } catch (e: unknown) {
+    console.error("DELETE /api/water-sources/:id", e);
+    res.status(500).json({ error: "Failed to delete location" });
   }
 });
 
