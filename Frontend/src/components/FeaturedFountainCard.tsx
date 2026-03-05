@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
+import StarFullIcon from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
 import { darkMapStyle } from "../constants/mapStyles";
 
 const region = (f: Fountain) => ({
@@ -17,7 +18,7 @@ interface FeaturedFountainCardProps {
   onClick?: () => void;
 }
 
-export default function FeaturedFountainCard({
+function FeaturedFountainCard({
   fountain,
   onClick,
 }: FeaturedFountainCardProps) {
@@ -60,10 +61,10 @@ export default function FeaturedFountainCard({
         {fountain.category ? (
           <Text style={styles.category}>{fountain.category}</Text>
         ) : null}
-        {fountain.rating !== undefined && (
+        {fountain.rating != null && (
           <View style={styles.rating}>
             <Text style={styles.ratingValue}>{fountain.rating}</Text>
-            <Ionicons name="star" size={16} color="#FFD700" />
+            <StarFullIcon width={16} height={16} fill="#FFD700" color="#FFD700" />
           </View>
         )}
       </View>
@@ -109,3 +110,5 @@ const styles = StyleSheet.create({
   rating: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingValue: { fontSize: 14, fontWeight: "600", color: "#000" },
 });
+
+export default React.memo(FeaturedFountainCard);

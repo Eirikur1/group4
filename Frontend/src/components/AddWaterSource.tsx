@@ -5,18 +5,17 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  Image,
   Alert,
   ActivityIndicator,
   TextInput,
 } from "react-native";
+import ImageWithSkeleton from "./ImageWithSkeleton";
+import StarRating from "./StarRating";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
 import { insertWaterSource } from "../lib/waterSources";
 import type { Fountain } from "../types/fountain";
-
-const RATING_EMOJIS = ["😖", "😕", "😐", "🙂", "😍"];
 
 interface AddWaterSourceProps {
   latitude: number;
@@ -114,7 +113,7 @@ export default function AddWaterSource({
           latitude,
           longitude,
           images: urls,
-          rating: selectedRating ?? undefined,
+          rating: selectedRating != null ? Math.round(selectedRating) : undefined,
         });
       } catch (apiErr) {
         const msg = apiErr instanceof Error ? apiErr.message : "Request failed";
@@ -142,20 +141,10 @@ export default function AddWaterSource({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
     >
-      {onClose && (
-        <Pressable
-          style={styles.closeRow}
-          onPress={onClose}
-          accessibilityLabel="Cancel"
-        >
-          <Ionicons name="arrow-back" size={24} color="#111827" />
-          <Text style={styles.closeText}>Cancel</Text>
-        </Pressable>
-      )}
       <View style={styles.header}>
         <Text style={styles.title}>Add a new water source</Text>
         <Text style={styles.subtitle}>
-          Hold on the map to select a spot, then add details below
+          Hold on the map to select a spot.
         </Text>
         <View style={styles.coordsRow}>
           <Ionicons name="location" size={16} color="#6B7280" />
@@ -180,19 +169,12 @@ export default function AddWaterSource({
       <View style={styles.ratingSection}>
         <Text style={styles.sectionTitle}>How would you rate the water?</Text>
         <Text style={styles.sectionSubtitle}>We'd love to know!</Text>
-        <View style={styles.emojis}>
-          {RATING_EMOJIS.map((emoji, i) => (
-            <Pressable
-              key={i}
-              style={[
-                styles.emojiButton,
-                selectedRating === i && styles.emojiButtonSelected,
-              ]}
-              onPress={() => setSelectedRating(i)}
-            >
-              <Text style={styles.emoji}>{emoji}</Text>
-            </Pressable>
-          ))}
+        <View style={styles.starsRow}>
+          <StarRating
+            rating={selectedRating}
+            size={28}
+            onRate={setSelectedRating}
+          />
         </View>
       </View>
 
@@ -202,7 +184,15 @@ export default function AddWaterSource({
           <View style={styles.previewRow}>
             {selectedUris.map((uri, index) => (
               <View key={`${uri}-${index}`} style={styles.previewWrap}>
-                <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" />
+                <ImageWithSkeleton
+                  uri={uri}
+                  containerStyle={StyleSheet.flatten([
+                    StyleSheet.absoluteFillObject,
+                    styles.previewImage,
+                  ])}
+                  resizeMode="cover"
+                  skeletonBorderRadius={8}
+                />
                 <Pressable
                   style={styles.removePreview}
                   onPress={() => removeImage(index)}
@@ -244,13 +234,6 @@ export default function AddWaterSource({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   contentContainer: { paddingBottom: 32 },
-  closeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 16,
-  },
-  closeText: { fontSize: 16, color: "#111827", fontWeight: "500" },
   header: { marginBottom: 24 },
   title: {
     fontSize: 22,
@@ -292,31 +275,11 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     marginBottom: 14,
   },
-  emojis: {
+  starsRow: {
     flexDirection: "row",
     justifyContent: "flex-start",
     alignItems: "center",
-    gap: 12,
   },
-  emojiButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#FFFFFF",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  emojiButtonSelected: {
-    backgroundColor: "#EBF5FB",
-    borderWidth: 2,
-    borderColor: "#3A9BDC",
-  },
-  emoji: { fontSize: 26 },
   uploadSection: { marginBottom: 24 },
   previewRow: {
     flexDirection: "row",

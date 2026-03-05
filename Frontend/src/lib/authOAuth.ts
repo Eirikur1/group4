@@ -53,10 +53,15 @@ export async function createSessionFromUrl(url: string): Promise<void> {
  */
 export async function signInWithOAuthProvider(): Promise<void> {
   if (!supabase) throw new Error("Supabase is not configured.");
+  // Use Expo's default redirect so it works in Expo Go (exp://...).
+  // Add this exact URL to Supabase → Auth → URL Configuration → Redirect URLs.
   const redirectTo = makeRedirectUri({
-    scheme: "sustainable-island",
     path: "auth/callback",
+    preferLocalhost: false,
   });
+  if (__DEV__) {
+    console.log("[Auth] Redirect URL for Supabase:", redirectTo);
+  }
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {

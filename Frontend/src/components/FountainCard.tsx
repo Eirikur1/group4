@@ -10,6 +10,7 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
+import StarFullIcon from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
 import { darkMapStyle } from "../constants/mapStyles";
 
 const thumbRegion = (f: Fountain) => ({
@@ -24,7 +25,7 @@ interface FountainCardProps {
   onClick?: () => void;
 }
 
-export default function FountainCard({ fountain, onClick }: FountainCardProps) {
+function FountainCard({ fountain, onClick }: FountainCardProps) {
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
@@ -71,10 +72,10 @@ export default function FountainCard({ fountain, onClick }: FountainCardProps) {
           <Text style={styles.distance}>{fountain.distance}</Text>
         ) : null}
       </View>
-      {fountain.rating !== undefined && (
+      {fountain.rating != null && (
         <View style={styles.rating}>
           <Text style={styles.ratingValue}>{fountain.rating}</Text>
-          <Ionicons name="star" size={16} color="#FFD700" />
+          <StarFullIcon width={16} height={16} fill="#FFD700" color="#FFD700" />
         </View>
       )}
       <Ionicons name="chevron-forward" size={20} color="#999" />
@@ -114,3 +115,5 @@ const styles = StyleSheet.create({
   rating: { flexDirection: "row", alignItems: "center", gap: 4 },
   ratingValue: { fontSize: 14, fontWeight: "600", color: "#000" },
 });
+
+export default React.memo(FountainCard);
