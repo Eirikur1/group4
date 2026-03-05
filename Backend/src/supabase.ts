@@ -46,15 +46,44 @@ function toResponse(row: WaterSourceRow): WaterSourceResponse {
   };
 }
 
+/** Fetch average rating per water_source_id from ratings table (empty if table missing). */
+async function getAverageRatings(): Promise<Map<string, number>> {
+  if (!supabase) return new Map();
+  const { data, error } = await supabase
+    .from("ratings")
+    .select("water_source_id, rating");
+  if (error) return new Map(); // e.g. ratings table not yet created
+  const byId = new Map<string, number[]>();
+  for (const row of (data ?? []) as { water_source_id: string; rating: number }[]) {
+    const id = row.water_source_id;
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id)!.push(row.rating);
+  }
+  const result = new Map<string, number>();
+  byId.forEach((ratings, id) => {
+    const sum = ratings.reduce((a, r) => a + r, 0);
+    result.set(id, Math.round((sum / ratings.length) * 10) / 10);
+  });
+  return result;
+}
+
 export async function getWaterSources(): Promise<WaterSourceResponse[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select("id, name, latitude, longitude, images, rating, is_operational")
-    .order("created_at", { ascending: false });
-  if (error) return [];
-  const rows = (data ?? []) as WaterSourceRow[];
-  return rows.map(toResponse);
+  const [sourcesResult, averages] = await Promise.all([
+    supabase
+      .from(TABLE)
+      .select("id, name, latitude, longitude, images, rating, is_operational")
+      .order("created_at", { ascending: false }),
+    getAverageRatings(),
+  ]);
+  if (sourcesResult.error) return [];
+  const rows = (sourcesResult.data ?? []) as WaterSourceRow[];
+  return rows.map((row) => {
+    const res = toResponse(row);
+    const avg = averages.get(row.id);
+    if (avg != null) res.rating = avg;
+    return res;
+  });
 }
 
 export interface InsertWaterSourceBody {

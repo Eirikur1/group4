@@ -2,6 +2,7 @@
   "expo": {
     "name": "Sustainable Island",
     "slug": "sustainable-island",
+    "scheme": "sustainable-island",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -18,8 +19,11 @@
       "expo-font",
       [
         "expo-location",
-        { "locationWhenInUsePermission": "Show your location on the map." }
-      ]
+        {
+          "locationWhenInUsePermission": "Show your location on the map."
+        }
+      ],
+      "expo-web-browser"
     ]
   }
 }

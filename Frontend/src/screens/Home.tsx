@@ -14,6 +14,9 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../navigation/types";
 import * as Location from "expo-location";
 import {
   Map,
@@ -24,11 +27,16 @@ import {
   ProfileMenu,
   AddWaterSource,
 } from "../components";
+import { useAuth } from "../contexts/AuthContext";
 import { mockFountains } from "../constants/mockFountains";
 import { distanceMeters, formatDistance } from "../utils/distance";
 import { fetchWaterFountains } from "../utils/overpass";
 import { fetchUserWaterSources } from "../lib/waterSources";
-import { fetchSavedLocations } from "../lib/savedLocations";
+import {
+  fetchSavedLocations,
+  isLocationSaved,
+  toggleSavedLocation,
+} from "../lib/savedLocations";
 import type { Fountain } from "../types/fountain";
 
 type SheetContent = "list" | "detail" | "profile" | "addSource" | "saved";
@@ -37,7 +45,11 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function Home() {
+  const navigation = useNavigation<NavProp>();
+  const { isSignedIn } = useAuth();
   const [fountains, setFountains] = useState<Fountain[]>(mockFountains);
   const [userFountains, setUserFountains] = useState<Fountain[]>([]);
   const [savedFountains, setSavedFountains] = useState<Fountain[]>([]);
@@ -47,7 +59,13 @@ export default function Home() {
   } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [selectedFountain, setSelectedFountain] = useState<Fountain | null>(
     null,
   );
@@ -57,6 +75,7 @@ export default function Home() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [selectedFountainSaved, setSelectedFountainSaved] = useState(false);
   const markerPressTimeRef = useRef(0);
   const pendingContentRef = useRef<
     | { type: "detail"; fountain: Fountain }
@@ -138,6 +157,63 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!selectedFountain) {
+      setSelectedFountainSaved(false);
+      return;
+    }
+    const fountainId = selectedFountain.id;
+    if (typeof fountainId !== "string") {
+      setSelectedFountainSaved(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const value = await isLocationSaved(fountainId);
+        if (!cancelled) setSelectedFountainSaved(value);
+      } catch {
+        if (!cancelled) setSelectedFountainSaved(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFountain?.id]);
+
+  const handleToggleSaved = useCallback(async () => {
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in to save",
+        "Sign in to save locations to your list.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+        ]
+      );
+      return;
+    }
+    if (!selectedFountain || typeof selectedFountain.id !== "string") {
+      Alert.alert(
+        "Not supported",
+        "Only database-backed fountains can be saved right now."
+      );
+      return;
+    }
+    const previous = selectedFountainSaved;
+    setSelectedFountainSaved((prev) => !prev);
+    refetchSavedFountains();
+    try {
+      await toggleSavedLocation(selectedFountain.id);
+    } catch (e) {
+      setSelectedFountainSaved(previous);
+      Alert.alert(
+        "Save failed",
+        e instanceof Error ? e.message : "Could not update saved location."
+      );
+    }
+  }, [isSignedIn, selectedFountain, selectedFountainSaved, refetchSavedFountains, navigation]);
+
   const handleUploadSuccess = useCallback(
     (newFountain: Fountain) => {
       refetchUserFountains();
@@ -189,14 +265,14 @@ export default function Home() {
   }, [allFountains, userLocation]);
 
   const searchDropdownFountains = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = debouncedSearchQuery.trim().toLowerCase();
     const list = q
       ? closestFountains.filter((f) =>
           f.name.toLowerCase().includes(q),
         )
       : closestFountains;
     return list.slice(0, 5);
-  }, [closestFountains, searchQuery]);
+  }, [closestFountains, debouncedSearchQuery]);
 
   const handleFountainClick = useCallback((fountain: Fountain) => {
     markerPressTimeRef.current = Date.now();
@@ -256,10 +332,21 @@ export default function Home() {
   );
 
   const handleAddLocationPress = useCallback(() => {
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in required",
+        "You need to log in to add a water source.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+        ]
+      );
+      return;
+    }
     if (!pendingAddCoordinate) return;
-    // Tapping the add-pin button now cancels/removes the pin.
-    setPendingAddCoordinate(null);
-  }, [pendingAddCoordinate]);
+    setSheetContent("addSource");
+    setCurrentSnap(1);
+  }, [isSignedIn, pendingAddCoordinate, navigation]);
 
   const handleAddSourceClose = useCallback(() => {
     setSheetContent("list");
@@ -272,10 +359,10 @@ export default function Home() {
     setCurrentSnap(1);
   }, []);
 
-  const handleOpenSaved = useCallback(async () => {
-    await refetchSavedFountains();
+  const handleOpenSaved = useCallback(() => {
     setSheetContent("saved");
     setCurrentSnap(1);
+    refetchSavedFountains();
   }, [refetchSavedFountains]);
 
   const handleSearchSelectFountain = useCallback(
@@ -372,21 +459,23 @@ export default function Home() {
           <Pressable
             style={[
               styles.addLocationButton,
-              !pendingAddCoordinate && styles.addLocationButtonDisabled,
+              isSignedIn && !pendingAddCoordinate && styles.addLocationButtonDisabled,
             ]}
             onPress={handleAddLocationPress}
-            disabled={!pendingAddCoordinate}
+            disabled={isSignedIn ? !pendingAddCoordinate : false}
             accessibilityLabel={
-              pendingAddCoordinate
-                ? "Add new location"
-                : "Long-press map to select a location first"
+              !isSignedIn
+                ? "Sign in to add a location"
+                : pendingAddCoordinate
+                  ? "Add new location"
+                  : "Long-press map to select a location first"
             }
           >
             <Image
               source={require("../../assets/icons/ADd.png")}
               style={[
                 styles.iconImage,
-                !pendingAddCoordinate && styles.addLocationButtonIconDisabled,
+                isSignedIn && !pendingAddCoordinate && styles.addLocationButtonIconDisabled,
               ]}
               resizeMode="contain"
             />
@@ -441,7 +530,15 @@ export default function Home() {
         {sheetContent === "detail" && selectedFountain && (
           <FountainDetail
             fountain={selectedFountain}
+            saved={selectedFountainSaved}
+            onToggleSaved={handleToggleSaved}
             onPhotosAdded={(updated) => {
+              setSelectedFountain(updated);
+              setUserFountains((prev) =>
+                prev.map((f) => (f.id === updated.id ? updated : f))
+              );
+            }}
+            onRatingChanged={(updated) => {
               setSelectedFountain(updated);
               setUserFountains((prev) =>
                 prev.map((f) => (f.id === updated.id ? updated : f))

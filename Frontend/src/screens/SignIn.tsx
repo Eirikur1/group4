@@ -13,6 +13,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { BackHeader, FormInput, SocialButtons } from "../components";
+import { signInWithOAuthProvider } from "../lib/authOAuth";
 import { supabase } from "../lib/supabase";
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -49,8 +50,17 @@ export default function SignIn() {
     }
   };
 
-  const handleSocialLogin = (provider: "google" | "apple" | "facebook") => {
-    // TODO: Implement social login (Supabase Auth → Providers → enable Google/Apple/etc.)
+  const handleSocialLogin = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithOAuthProvider();
+      navigation.navigate("Home");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sign-in failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -108,7 +118,7 @@ export default function SignIn() {
           <Text style={styles.dividerText}>Or</Text>
           <View style={styles.dividerLine} />
         </View>
-        <SocialButtons onSocialLogin={handleSocialLogin} />
+        <SocialButtons onGoogleLogin={handleSocialLogin} />
       </ScrollView>
     </SafeAreaView>
   );

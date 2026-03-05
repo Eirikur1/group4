@@ -12,6 +12,9 @@ import {
   Alert,
   Animated,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../navigation/types";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -21,6 +24,12 @@ import { openDirections } from "../utils/directions";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
 import { addPhotosToWaterSource } from "../lib/waterSources";
 import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
+import { submitRating, getAverageRating } from "../lib/ratings";
+import { useAuth } from "../contexts/AuthContext";
+import SavedIcon from "./SavedIcon";
+import ImageWithSkeleton from "./ImageWithSkeleton";
+import StarRating from "./StarRating";
+import StarFullIcon from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
 
 const SCREEN_W = Dimensions.get("window").width;
 // Account for mapBlock margins (8), padding (13), and belowMap margins (6)
@@ -31,11 +40,14 @@ const ITEM_W = (CAROUSEL_W - IMG_GAP * 2) / 2.5;
 
 interface FountainDetailProps {
   fountain: Fountain;
+  /** When provided with onToggleSaved, save button is shown on the map instead of here */
+  saved?: boolean;
+  onToggleSaved?: () => void;
   onPhotosAdded?: (updated: Fountain) => void;
   onSavedChanged?: () => void;
+  /** Called after user submits a rating so parent can update fountain with new average */
+  onRatingChanged?: (updated: Fountain) => void;
 }
-
-const RATING_EMOJIS = ["😖", "😕", "😐", "🙂", "😍"];
 
 const fountainRegion = (f: Fountain) => ({
   latitude: f.latitude,
@@ -45,41 +57,29 @@ const fountainRegion = (f: Fountain) => ({
 });
 
 function PhotoTile({ uri, width, marginRight }: { uri: string; width: number; marginRight: number }) {
-  const [loaded, setLoaded] = useState(false);
-  const pulse = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    if (loaded) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.5, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [loaded, pulse]);
-
   return (
-    <View style={[styles.carouselImage, { width, marginRight }]}>
-      {!loaded && (
-        <Animated.View style={[StyleSheet.absoluteFill, styles.skeleton, { opacity: pulse }]} />
-      )}
-      <Image
-        source={{ uri }}
-        style={[StyleSheet.absoluteFill, !loaded && { opacity: 0 }]}
-        resizeMode="cover"
-        onLoad={() => setLoaded(true)}
-      />
-    </View>
+    <ImageWithSkeleton
+      uri={uri}
+      containerStyle={StyleSheet.flatten([styles.carouselImage, { width, marginRight }])}
+      imageStyle={StyleSheet.absoluteFillObject}
+      resizeMode="cover"
+      skeletonBorderRadius={10}
+    />
   );
 }
 
+type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function FountainDetail({
   fountain,
+  saved: savedProp,
+  onToggleSaved,
   onPhotosAdded,
   onSavedChanged,
+  onRatingChanged,
 }: FountainDetailProps) {
+  const navigation = useNavigation<NavProp>();
+  const { isSignedIn } = useAuth();
   const urls: string[] =
     (fountain.images?.length ?? 0) > 0
       ? fountain.images!
@@ -90,7 +90,6 @@ export default function FountainDetail({
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [addingPhoto, setAddingPhoto] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [savingLocation, setSavingLocation] = useState(false);
 
   // Only user-uploaded fountains (UUID string IDs) support adding photos.
   const canAddPhotos = typeof fountain.id === "string" && !!onPhotosAdded;
@@ -143,18 +142,22 @@ export default function FountainDetail({
   }
 
   const uploadUris = useCallback(async (uris: string[]) => {
-    if (!uris.length) return;
+    if (!uris.length || !onPhotosAdded) return;
+    const previousImages = fountain.images ?? (fountain.imageUrl ? [fountain.imageUrl] : []);
+    const optimisticImages = [...previousImages, ...uris];
+    onPhotosAdded({ ...fountain, images: optimisticImages });
     setAddingPhoto(true);
     try {
       const newUrls = await uploadFountainPhotos(uris);
       const updated = await addPhotosToWaterSource(String(fountain.id), newUrls);
-      if (updated) onPhotosAdded?.(updated);
+      if (updated) onPhotosAdded(updated);
     } catch (e) {
+      onPhotosAdded({ ...fountain, images: previousImages });
       Alert.alert("Upload failed", e instanceof Error ? e.message : "Could not add photos.");
     } finally {
       setAddingPhoto(false);
     }
-  }, [fountain.id, onPhotosAdded]);
+  }, [fountain, onPhotosAdded]);
 
   const addFromLibrary = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -196,6 +199,17 @@ export default function FountainDetail({
   }, [addFromCamera, addFromLibrary]);
 
   const handleToggleSaved = useCallback(async () => {
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in to save",
+        "Sign in to save locations to your list.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+        ]
+      );
+      return;
+    }
     if (typeof fountain.id !== "string") {
       Alert.alert(
         "Not supported",
@@ -203,20 +217,43 @@ export default function FountainDetail({
       );
       return;
     }
-    setSavingLocation(true);
+    const previous = saved;
+    setSaved((prev) => !prev);
+    onSavedChanged?.();
     try {
-      const next = await toggleSavedLocation(fountain.id);
-      setSaved(next);
-      onSavedChanged?.();
+      await toggleSavedLocation(fountain.id);
     } catch (e) {
+      setSaved(previous);
       Alert.alert(
         "Save failed",
         e instanceof Error ? e.message : "Could not update saved location."
       );
-    } finally {
-      setSavingLocation(false);
     }
-  }, [fountain.id, onSavedChanged]);
+  }, [isSignedIn, fountain.id, saved, onSavedChanged, navigation]);
+
+  const canRate =
+    isSignedIn &&
+    typeof fountain.id === "string" &&
+    onRatingChanged != null;
+  const handleRate = useCallback(
+    async (rating: number) => {
+      if (!canRate || typeof fountain.id !== "string") return;
+      const previousRating = fountain.rating;
+      onRatingChanged?.({ ...fountain, rating });
+      try {
+        await submitRating(fountain.id, Math.round(rating));
+        const avg = await getAverageRating(fountain.id);
+        onRatingChanged?.({ ...fountain, rating: avg ?? rating });
+      } catch (e) {
+        onRatingChanged?.({ ...fountain, rating: previousRating });
+        Alert.alert(
+          "Rating failed",
+          e instanceof Error ? e.message : "Could not save rating."
+        );
+      }
+    },
+    [canRate, fountain, onRatingChanged]
+  );
 
   return (
     <ScrollView
@@ -254,6 +291,29 @@ export default function FountainDetail({
             </Marker>
           </MapView>
         </View>
+        <View style={styles.mapSaveOverlay} pointerEvents="box-none">
+          <Pressable
+            style={({ pressed }) => [
+              styles.mapSaveButton,
+              pressed && styles.mapSaveButtonPressed,
+            ]}
+            onPress={onToggleSaved ?? handleToggleSaved}
+              accessibilityLabel={
+              !isSignedIn
+                ? "Sign in to save location"
+                : (savedProp ?? saved)
+                  ? "Remove from saved"
+                  : "Save location"
+            }
+            >
+              <View style={styles.mapSaveIconCircle}>
+                <SavedIcon
+                  size={18}
+                  filled={savedProp ?? saved}
+                />
+              </View>
+            </Pressable>
+        </View>
         <View style={styles.belowMap}>
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={2}>
@@ -263,31 +323,12 @@ export default function FountainDetail({
               {fountain.category ? (
                 <Text style={styles.category}>{fountain.category}</Text>
               ) : null}
-              {fountain.rating !== undefined && (
+              {fountain.rating != null && (
                 <View style={styles.rating}>
                   <Text style={styles.ratingValue}>{fountain.rating}</Text>
-                  <Ionicons name="star" size={18} color="#FFD700" />
+                  <StarFullIcon width={18} height={18} fill="#FFD700" color="#FFD700" />
                 </View>
               )}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.saveButton,
-                  pressed && styles.saveButtonPressed,
-                ]}
-                onPress={handleToggleSaved}
-                disabled={savingLocation}
-                accessibilityLabel={saved ? "Remove from saved" : "Save location"}
-              >
-                {savingLocation ? (
-                  <ActivityIndicator size="small" color="#2E7D32" />
-                ) : (
-                  <Ionicons
-                    name={saved ? "bookmark" : "bookmark-outline"}
-                    size={20}
-                    color="#2E7D32"
-                  />
-                )}
-              </Pressable>
             </View>
           </View>
           {/* Image carousel — last tile is the add-photo button when allowed */}
@@ -345,22 +386,6 @@ export default function FountainDetail({
           ) : null}
         </View>
         <View style={styles.strokeFrame}>
-          <View style={styles.contentRest}>
-            <View style={styles.ratingSection}>
-              <Text style={styles.ratingQuestion}>
-                How would you rate the water?
-              </Text>
-              <Text style={styles.ratingSubtitle}>We'd love to know!</Text>
-              <View style={styles.emojis}>
-                {RATING_EMOJIS.map((emoji, i) => (
-                  <Pressable key={i} style={styles.emojiButton}>
-                    <Text style={styles.emoji}>{emoji}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          </View>
-
           {fountain.distance ? (
             <Text style={styles.distanceAboveButton}>{fountain.distance}</Text>
           ) : null}
@@ -377,6 +402,22 @@ export default function FountainDetail({
               <Ionicons name="navigate" size={20} color="#FFFFFF" />
               <Text style={styles.directionsButtonText}>Get directions</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.contentRest}>
+            <View style={styles.ratingSection}>
+              <Text style={styles.ratingQuestion}>
+                How would you rate the water?
+              </Text>
+              <Text style={styles.ratingSubtitle}>We'd love to know!</Text>
+              <View style={styles.starsRow}>
+                <StarRating
+                  rating={fountain.rating}
+                  size={28}
+                  onRate={canRate ? handleRate : undefined}
+                />
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -440,6 +481,39 @@ const styles = StyleSheet.create({
   },
   mapImage: { width: "100%", height: "100%" },
   mapPin: { width: 44, height: 44 },
+  mapSaveOverlay: {
+    position: "absolute",
+    top: 16,
+    right: 22,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    elevation: 10,
+  },
+  mapSaveButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapSaveIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 11,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+  },
+  mapSaveButtonPressed: { opacity: 0.7 },
   content: {
     paddingHorizontal: 0,
     paddingTop: 0,
@@ -465,18 +539,6 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   titleRight: { alignItems: "flex-end", minWidth: 80 },
-  saveButton: {
-    marginTop: 8,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: "#D9EAD3",
-    backgroundColor: "#F6FBF5",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  saveButtonPressed: { opacity: 0.8 },
   category: {
     fontSize: 14,
     color: "#666666",
@@ -496,10 +558,6 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 10,
     overflow: "hidden",
-  },
-  skeleton: {
-    backgroundColor: "#E0E0E0",
-    borderRadius: 10,
   },
   dotsRow: {
     flexDirection: "row",
@@ -545,21 +603,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: "center",
   },
-  emojis: {
+  starsRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 12,
   },
-  emojiButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#F5F5F5",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emoji: { fontSize: 28 },
   distanceAboveButton: {
     fontSize: 14,
     color: "#666666",
