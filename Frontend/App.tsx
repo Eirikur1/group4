@@ -1,6 +1,9 @@
 import "react-native-url-polyfill/auto";
 import React from "react";
 import { StatusBar } from "expo-status-bar";
+import { maybeCompleteAuthSession } from "./src/lib/authOAuth";
+
+maybeCompleteAuthSession();
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
