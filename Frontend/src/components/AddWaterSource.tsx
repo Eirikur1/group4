@@ -125,11 +125,6 @@ export default function AddWaterSource({
         throw new Error(`Save location: ${msg}`);
       }
       if (newFountain) onUploadSuccess?.(newFountain);
-      Alert.alert(
-        "Upload complete",
-        `"${title.trim()}" has been added. You can view it below.`,
-        [{ text: "OK" }]
-      );
     } catch (e) {
       const message = e instanceof Error ? e.message : "Upload failed";
       Alert.alert("Upload failed", message);

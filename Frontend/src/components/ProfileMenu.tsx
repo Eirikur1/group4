@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { getMyProfile, uploadAvatar } from "../lib/profile";
+import { getRefillCount, logRefill } from "../lib/refills";
 import HeartLogo from "../../assets/icons/HeartLogo.svg";
 
 interface ProfileMenuProps {
@@ -23,10 +24,13 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
   const { isSignedIn, user } = useAuth();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [refillCount, setRefillCount] = useState<number>(0);
+  const [loggingRefill, setLoggingRefill] = useState(false);
 
   useEffect(() => {
     if (!user?.id) {
       setAvatarUrl(null);
+      setRefillCount(0);
       return;
     }
     let cancelled = false;
@@ -38,6 +42,28 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    getRefillCount(user.id).then((count) => {
+      if (!cancelled) setRefillCount(count);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const handleLogRefill = async () => {
+    if (!user?.id || loggingRefill) return;
+    setLoggingRefill(true);
+    try {
+      const ok = await logRefill(user.id, null);
+      if (ok) setRefillCount((c) => c + 1);
+    } finally {
+      setLoggingRefill(false);
+    }
+  };
 
   const handleAvatarPress = async () => {
     if (!user?.id || uploadingAvatar) return;
@@ -104,7 +130,11 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
               {isSignedIn ? user?.email ?? "User" : "Guest"}
             </Text>
             <Text style={styles.stats}>
-              {isSignedIn ? "★ Refills" : "No refills"}
+              {isSignedIn
+                ? refillCount === 0
+                  ? "No refills yet"
+                  : `${refillCount} refill${refillCount === 1 ? "" : "s"}`
+                : "No refills"}
             </Text>
           </View>
         </View>
@@ -113,6 +143,12 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
       <View style={styles.menu}>
         {isSignedIn && (
           <>
+            <MenuItem
+              icon={<Ionicons name="add-circle-outline" size={20} color="#333" />}
+              title="Log a refill"
+              subtitle="Count a refill (e.g. if you didn’t tap at the station)"
+              onClick={handleLogRefill}
+            />
             <MenuItem
               icon={<Ionicons name="bookmark" size={20} color="#333" />}
               title="Favorites"

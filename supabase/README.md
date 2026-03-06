@@ -4,7 +4,7 @@ Run the migrations in your Supabase project so the app can store ratings, creato
 
 **Option A – Supabase Dashboard**  
 1. Open your project → SQL Editor.  
-2. Run the contents of `migrations/001_ratings.sql`, then `migrations/002_created_by_profiles.sql`.
+2. Run the contents of `migrations/001_ratings.sql`, then `002_created_by_profiles.sql`, then `003_refills.sql`.
 
 **Option B – Supabase CLI**  
 From the repo root: `supabase db push` (or your usual migration command).
@@ -18,3 +18,4 @@ After the migrations, the app will:
 - Record who created each water source and show “Added by” with optional profile picture.
 - Let users set a profile picture (stored in the **avatars** bucket and `profiles.avatar_url`).
 - Let creators edit or delete their own locations.
+- Let users count refills (log from a location or from profile); total shown in profile menu.

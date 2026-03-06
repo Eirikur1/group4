@@ -13,6 +13,7 @@ import {
   Keyboard,
   Alert,
 } from "react-native";
+import LottieView from "lottie-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -214,6 +215,8 @@ export default function Home() {
     }
   }, [isSignedIn, selectedFountain, selectedFountainSaved, refetchSavedFountains, navigation]);
 
+  const [showLeafSavedPopup, setShowLeafSavedPopup] = useState(false);
+
   const handleUploadSuccess = useCallback(
     (newFountain: Fountain) => {
       const withDistance =
@@ -236,6 +239,7 @@ export default function Home() {
       setSelectedFountain(withDistance);
       setSheetContent("detail");
       setCurrentSnap(1);
+      setShowLeafSavedPopup(true);
       // Refetch after a short delay so the server has the new row; merge result so we never drop the new pin
       setTimeout(() => {
         fetchUserWaterSources().then((list) => {
@@ -249,6 +253,10 @@ export default function Home() {
     },
     [userLocation],
   );
+
+  const handleLeafSavedFinish = useCallback(() => {
+    setShowLeafSavedPopup(false);
+  }, []);
 
   const allFountains = useMemo(
     () => [...fountains, ...userFountains],
@@ -390,7 +398,7 @@ export default function Home() {
     <View style={styles.container}>
       {locationReady && (
       <Map
-        key={`map-${allFountains.length}-${allFountains[0]?.id ?? ""}`}
+        key={`map-${allFountains.length}`}
         fountains={allFountains}
         region={
           userLocation
@@ -620,12 +628,35 @@ export default function Home() {
           />
         )}
       </BottomSheet>
+
+      {showLeafSavedPopup && (
+        <View style={styles.leafSavedWrap} pointerEvents="none">
+          <LottieView
+            source={require("../../assets/icons/JitterFiles/NewLoAdded.json")}
+            autoPlay
+            loop={false}
+            onAnimationFinish={handleLeafSavedFinish}
+            style={styles.leafSavedLottie}
+          />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  leafSavedWrap: {
+    position: "absolute",
+    top: 48,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  leafSavedLottie: {
+    width: 300,
+    height: 300,
+  },
   overlay: {
     position: "absolute",
     top: 0,

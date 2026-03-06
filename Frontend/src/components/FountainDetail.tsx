@@ -10,10 +10,10 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
-  Animated,
   Modal,
   TextInput,
 } from "react-native";
+import LottieView from "lottie-react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -31,6 +31,7 @@ import {
 } from "../lib/waterSources";
 import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
 import { submitRating, getAverageRating } from "../lib/ratings";
+import { logRefill } from "../lib/refills";
 import { useAuth } from "../contexts/AuthContext";
 import SavedIcon from "./SavedIcon";
 import ImageWithSkeleton from "./ImageWithSkeleton";
@@ -106,6 +107,10 @@ export default function FountainDetail({
   const [editName, setEditName] = useState(fountain.name);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [loggingRefill, setLoggingRefill] = useState(false);
+  const [showRefillToast, setShowRefillToast] = useState(false);
+  const refillLottieRef = useRef<LottieView>(null);
+  const refillToastHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Creator can add photos; if there is no creator (legacy location), any signed-in user can add.
   const isOwner =
@@ -315,6 +320,44 @@ export default function FountainDetail({
     );
   }, [fountain.id, fountain.name, session?.access_token, onFountainDeleted, navigation]);
 
+  const handleRefillHere = useCallback(async () => {
+    if (!user?.id || loggingRefill) return;
+    setLoggingRefill(true);
+    try {
+      const waterSourceId = typeof fountain.id === "string" ? fountain.id : null;
+      await logRefill(user.id, waterSourceId);
+      if (refillToastHideTimeoutRef.current) {
+        clearTimeout(refillToastHideTimeoutRef.current);
+        refillToastHideTimeoutRef.current = null;
+      }
+      setShowRefillToast(true);
+      refillToastHideTimeoutRef.current = setTimeout(() => {
+        refillToastHideTimeoutRef.current = null;
+        setShowRefillToast(false);
+      }, 5000);
+    } catch {
+      Alert.alert("Couldn't log refill", "Please try again.");
+    } finally {
+      setLoggingRefill(false);
+    }
+  }, [user?.id, fountain.id, loggingRefill]);
+
+  const handleRefillLottieFinish = useCallback(() => {
+    if (refillToastHideTimeoutRef.current) {
+      clearTimeout(refillToastHideTimeoutRef.current);
+      refillToastHideTimeoutRef.current = null;
+    }
+    setShowRefillToast(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (refillToastHideTimeoutRef.current) {
+        clearTimeout(refillToastHideTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleSaveEdit = useCallback(async () => {
     const name = editName.trim();
     if (!name || typeof fountain.id !== "string") return;
@@ -340,8 +383,9 @@ export default function FountainDetail({
   }, [fountain.id, editName, session?.access_token, onFountainUpdated]);
 
   return (
+    <View style={styles.container}>
     <ScrollView
-      style={styles.container}
+      style={styles.scrollView}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       bounces={true}
@@ -376,27 +420,48 @@ export default function FountainDetail({
           </MapView>
         </View>
         <View style={styles.mapSaveOverlay} pointerEvents="box-none">
+          {isSignedIn ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.mapRefillButton,
+                pressed && styles.mapRefillButtonPressed,
+              ]}
+              onPress={handleRefillHere}
+              disabled={loggingRefill}
+              accessibilityLabel="I refilled here"
+            >
+              <View style={styles.mapRefillIconCircle}>
+                {loggingRefill ? (
+                  <ActivityIndicator size="small" color="#3A9BDC" />
+                ) : (
+                  <Ionicons name="water" size={16} color="#3A9BDC" />
+                )}
+              </View>
+            </Pressable>
+          ) : (
+            <View style={styles.mapRefillButtonPlaceholder} />
+          )}
           <Pressable
             style={({ pressed }) => [
               styles.mapSaveButton,
               pressed && styles.mapSaveButtonPressed,
             ]}
             onPress={onToggleSaved ?? handleToggleSaved}
-              accessibilityLabel={
+            accessibilityLabel={
               !isSignedIn
                 ? "Sign in to save location"
                 : (savedProp ?? saved)
                   ? "Remove from saved"
                   : "Save location"
             }
-            >
-              <View style={styles.mapSaveIconCircle}>
-                <SavedIcon
-                  size={18}
-                  filled={savedProp ?? saved}
-                />
-              </View>
-            </Pressable>
+          >
+            <View style={styles.mapSaveIconCircle}>
+              <SavedIcon
+                size={18}
+                filled={savedProp ?? saved}
+              />
+            </View>
+          </Pressable>
         </View>
         <View style={styles.belowMap}>
           <View style={styles.titleRow}>
@@ -594,6 +659,22 @@ export default function FountainDetail({
         </Pressable>
       </Modal>
     </ScrollView>
+
+      {showRefillToast && (
+        <View style={styles.refillToastWrap} pointerEvents="none">
+          <View style={styles.refillToast}>
+            <LottieView
+              ref={refillLottieRef}
+              source={require("../../assets/icons/JitterFiles/BlueRefillAdd.json")}
+              autoPlay
+              loop={false}
+              onAnimationFinish={handleRefillLottieFinish}
+              style={styles.refillToastLottie}
+            />
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -610,6 +691,7 @@ const GAP_IMAGES = 12;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  scrollView: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 32,
@@ -663,13 +745,39 @@ const styles = StyleSheet.create({
   mapSaveOverlay: {
     position: "absolute",
     top: 16,
+    left: 22,
     right: 22,
-    width: 36,
-    height: 36,
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    justifyContent: "center",
     zIndex: 10,
     elevation: 10,
+  },
+  mapRefillButtonPlaceholder: {
+    width: 32,
+    height: 32,
+  },
+  mapRefillButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapRefillButtonPressed: { opacity: 0.7 },
+  mapRefillIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 11,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
   },
   mapSaveButton: {
     width: 36,
@@ -870,4 +978,19 @@ const styles = StyleSheet.create({
   modalButtonSave: { backgroundColor: "#3A9BDC" },
   modalButtonCancelText: { fontSize: 15, fontWeight: "600", color: "#333" },
   modalButtonSaveText: { fontSize: 15, fontWeight: "600", color: "#FFF" },
+  refillToastWrap: {
+    position: "absolute",
+    top: 48,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  refillToast: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refillToastLottie: {
+    width: 200,
+    height: 200,
+  },
 });
