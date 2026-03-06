@@ -28,6 +28,7 @@ import {
   ProfileMenu,
   AddWaterSource,
 } from "../components";
+import RefillWaterJugIcon from "../../assets/icons/RefillWaterJug.svg";
 import { useAuth } from "../contexts/AuthContext";
 import { mockFountains } from "../constants/mockFountains";
 import { distanceMeters, formatDistance } from "../utils/distance";
@@ -38,6 +39,7 @@ import {
   isLocationSaved,
   toggleSavedLocation,
 } from "../lib/savedLocations";
+import { logRefill } from "../lib/refills";
 import type { Fountain } from "../types/fountain";
 
 type SheetContent = "list" | "detail" | "profile" | "addSource" | "saved";
@@ -50,7 +52,7 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function Home() {
   const navigation = useNavigation<NavProp>();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, user } = useAuth();
   const [fountains, setFountains] = useState<Fountain[]>(mockFountains);
   const [userFountains, setUserFountains] = useState<Fountain[]>([]);
   const [savedFountains, setSavedFountains] = useState<Fountain[]>([]);
@@ -77,6 +79,10 @@ export default function Home() {
     longitude: number;
   } | null>(null);
   const [selectedFountainSaved, setSelectedFountainSaved] = useState(false);
+  const [showRefillSavedToast, setShowRefillSavedToast] = useState(false);
+  const refillSavedToastTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const markerPressTimeRef = useRef(0);
   const pendingContentRef = useRef<
     | { type: "detail"; fountain: Fountain }
@@ -132,6 +138,14 @@ export default function Home() {
       cancelled = true;
     };
   }, [userLocation?.latitude, userLocation?.longitude]);
+
+  useEffect(() => {
+    return () => {
+      if (refillSavedToastTimeoutRef.current) {
+        clearTimeout(refillSavedToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -258,6 +272,14 @@ export default function Home() {
     setShowLeafSavedPopup(false);
   }, []);
 
+  const handleRefillSavedFinish = useCallback(() => {
+    if (refillSavedToastTimeoutRef.current) {
+      clearTimeout(refillSavedToastTimeoutRef.current);
+      refillSavedToastTimeoutRef.current = null;
+    }
+    setShowRefillSavedToast(false);
+  }, []);
+
   const allFountains = useMemo(
     () => [...fountains, ...userFountains],
     [fountains, userFountains],
@@ -367,6 +389,48 @@ export default function Home() {
     setCurrentSnap(1);
   }, [isSignedIn, pendingAddCoordinate, navigation]);
 
+  const handleAddRefillPress = useCallback(async () => {
+    if (!isSignedIn) {
+      Alert.alert(
+        "Sign in required",
+        "You need to log in to log a refill.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+        ]
+      );
+      return;
+    }
+    if (!user?.id) return;
+    const closestWithId = closestFountains.find(
+      (f) => typeof f.id === "string",
+    );
+    if (!closestWithId) {
+      Alert.alert(
+        "No refill station nearby",
+        "Open a fountain from the list and tap \"I refilled here\" to log a refill.",
+      );
+      return;
+    }
+    try {
+      const ok = await logRefill(user.id, closestWithId.id);
+      if (ok) {
+        setShowRefillSavedToast(true);
+        if (refillSavedToastTimeoutRef.current) {
+          clearTimeout(refillSavedToastTimeoutRef.current);
+        }
+        refillSavedToastTimeoutRef.current = setTimeout(() => {
+          refillSavedToastTimeoutRef.current = null;
+          setShowRefillSavedToast(false);
+        }, 5000);
+      } else {
+        Alert.alert("Couldn't log refill", "Please try again.");
+      }
+    } catch {
+      Alert.alert("Couldn't log refill", "Please try again.");
+    }
+  }, [isSignedIn, user?.id, closestFountains, navigation]);
+
   const handleAddSourceClose = useCallback(() => {
     setSheetContent("list");
     setCurrentSnap(0);
@@ -417,6 +481,20 @@ export default function Home() {
         onFountainPress={handleFountainClick}
       />
       )}
+
+      <View style={styles.addRefillWrap} pointerEvents="box-none">
+        <Pressable
+          style={({ pressed }) => [
+            styles.addRefillButton,
+            pressed && styles.addRefillButtonPressed,
+          ]}
+          onPress={handleAddRefillPress}
+          accessibilityLabel="Add water refill"
+          accessibilityRole="button"
+        >
+          <RefillWaterJugIcon width={56} height={56} />
+        </Pressable>
+      </View>
 
       <SafeAreaView style={styles.overlay} edges={["top"]}>
         <View style={styles.searchColumn}>
@@ -503,9 +581,10 @@ export default function Home() {
         </View>
       </SafeAreaView>
 
-      <BottomSheet
-        snapPoints={[122, "90%"]}
-        index={currentSnap}
+      <View style={styles.sheetLayer}>
+        <BottomSheet
+          snapPoints={[122, "90%"]}
+          index={currentSnap}
         onSnapChange={handleSheetSnapChange}
         onBackdropPress={handleBackdropPress}
         title={
@@ -627,7 +706,8 @@ export default function Home() {
             onUploadSuccess={handleUploadSuccess}
           />
         )}
-      </BottomSheet>
+        </BottomSheet>
+      </View>
 
       {showLeafSavedPopup && (
         <View style={styles.leafSavedWrap} pointerEvents="none">
@@ -640,12 +720,44 @@ export default function Home() {
           />
         </View>
       )}
+
+      {showRefillSavedToast && (
+        <View style={styles.leafSavedWrap} pointerEvents="none">
+          <LottieView
+            source={require("../../assets/icons/JitterFiles/RefillSavedFinal.json")}
+            autoPlay
+            loop={false}
+            onAnimationFinish={handleRefillSavedFinish}
+            style={styles.leafSavedLottie}
+          />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  addRefillWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 150,
+    alignItems: "flex-end",
+    paddingRight: 24,
+    zIndex: 1,
+  },
+  addRefillButton: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  addRefillButtonPressed: {
+    opacity: 0.85,
+  },
   leafSavedWrap: {
     position: "absolute",
     top: 24,
@@ -667,6 +779,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     gap: 8,
+    zIndex: 10,
+  },
+  sheetLayer: {
+    zIndex: 10,
   },
   searchColumn: { flex: 1 },
   searchWrap: {
