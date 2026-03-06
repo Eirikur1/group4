@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
 import { insertWaterSource } from "../lib/waterSources";
 import type { Fountain } from "../types/fountain";
+import { useAuth } from "../contexts/AuthContext";
 
 interface AddWaterSourceProps {
   latitude: number;
@@ -31,24 +32,30 @@ export default function AddWaterSource({
   onClose,
   onUploadSuccess,
 }: AddWaterSourceProps) {
+  const { session } = useAuth();
   const [title, setTitle] = useState("");
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [selectedUris, setSelectedUris] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  const [permission, requestPermission] = ImagePicker.useMediaLibraryPermissions();
-  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
+  const [permission, requestPermission] =
+    ImagePicker.useMediaLibraryPermissions();
+  const [cameraPermission, requestCameraPermission] =
+    ImagePicker.useCameraPermissions();
 
   const addFromLibrary = async () => {
     if (permission?.status !== "granted") {
       const { status } = await requestPermission();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Allow access to your photos to upload images.");
+        Alert.alert(
+          "Permission needed",
+          "Allow access to your photos to upload images.",
+        );
         return;
       }
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       allowsMultipleSelection: true,
       quality: 0.8,
     });
@@ -66,7 +73,7 @@ export default function AddWaterSource({
       }
     }
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.length) {
@@ -103,28 +110,28 @@ export default function AddWaterSource({
       try {
         urls = await uploadFountainPhotos(selectedUris);
       } catch (photoErr) {
-        const msg = photoErr instanceof Error ? photoErr.message : "Photo upload failed";
+        const msg =
+          photoErr instanceof Error ? photoErr.message : "Photo upload failed";
         throw new Error(`Photos: ${msg}`);
       }
       let newFountain;
       try {
-        newFountain = await insertWaterSource({
-          name: title.trim(),
-          latitude,
-          longitude,
-          images: urls,
-          rating: selectedRating != null ? Math.round(selectedRating) : undefined,
-        });
+        newFountain = await insertWaterSource(
+          {
+            name: title.trim(),
+            latitude,
+            longitude,
+            images: urls,
+            rating:
+              selectedRating != null ? Math.round(selectedRating) : undefined,
+          },
+          session?.access_token,
+        );
       } catch (apiErr) {
         const msg = apiErr instanceof Error ? apiErr.message : "Request failed";
         throw new Error(`Save location: ${msg}`);
       }
       if (newFountain) onUploadSuccess?.(newFountain);
-      Alert.alert(
-        "Upload complete",
-        `"${title.trim()}" has been added. You can view it below.`,
-        [{ text: "OK" }]
-      );
     } catch (e) {
       const message = e instanceof Error ? e.message : "Upload failed";
       Alert.alert("Upload failed", message);
@@ -143,9 +150,7 @@ export default function AddWaterSource({
     >
       <View style={styles.header}>
         <Text style={styles.title}>Add a new water source</Text>
-        <Text style={styles.subtitle}>
-          Hold on the map to select a spot.
-        </Text>
+        <Text style={styles.subtitle}>Hold on the map to select a spot.</Text>
         <View style={styles.coordsRow}>
           <Ionicons name="location" size={16} color="#6B7280" />
           <Text style={styles.coordsText}>
@@ -216,7 +221,10 @@ export default function AddWaterSource({
       </View>
 
       <Pressable
-        style={[styles.submitButton, (!canSubmit || uploading) && styles.submitButtonDisabled]}
+        style={[
+          styles.submitButton,
+          (!canSubmit || uploading) && styles.submitButtonDisabled,
+        ]}
         onPress={handleSubmit}
         disabled={!canSubmit || uploading}
         accessibilityLabel="Upload a new water source"

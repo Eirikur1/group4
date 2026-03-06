@@ -13,6 +13,7 @@ import {
   Keyboard,
   Alert,
 } from "react-native";
+import LottieView from "lottie-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -214,10 +215,10 @@ export default function Home() {
     }
   }, [isSignedIn, selectedFountain, selectedFountainSaved, refetchSavedFountains, navigation]);
 
+  const [showLeafSavedPopup, setShowLeafSavedPopup] = useState(false);
+
   const handleUploadSuccess = useCallback(
     (newFountain: Fountain) => {
-      refetchUserFountains();
-      setPendingAddCoordinate(null);
       const withDistance =
         userLocation && !newFountain.distance
           ? {
@@ -232,12 +233,30 @@ export default function Home() {
               ),
             }
           : newFountain;
+      // Add the new fountain to the list immediately so the pin appears right away
+      setUserFountains((prev) => [withDistance, ...prev]);
+      setPendingAddCoordinate(null);
       setSelectedFountain(withDistance);
       setSheetContent("detail");
       setCurrentSnap(1);
+      setShowLeafSavedPopup(true);
+      // Refetch after a short delay so the server has the new row; merge result so we never drop the new pin
+      setTimeout(() => {
+        fetchUserWaterSources().then((list) => {
+          setUserFountains((prev) => {
+            const serverIds = new Set(list.map((f) => f.id));
+            const onlyInPrev = prev.filter((f) => !serverIds.has(f.id));
+            return [...list, ...onlyInPrev];
+          });
+        });
+      }, 800);
     },
-    [refetchUserFountains, userLocation],
+    [userLocation],
   );
+
+  const handleLeafSavedFinish = useCallback(() => {
+    setShowLeafSavedPopup(false);
+  }, []);
 
   const allFountains = useMemo(
     () => [...fountains, ...userFountains],
@@ -379,6 +398,7 @@ export default function Home() {
     <View style={styles.container}>
       {locationReady && (
       <Map
+        key={`map-${allFountains.length}`}
         fountains={allFountains}
         region={
           userLocation
@@ -544,6 +564,21 @@ export default function Home() {
                 prev.map((f) => (f.id === updated.id ? updated : f))
               );
             }}
+            onFountainUpdated={(updated) => {
+              setSelectedFountain(updated);
+              setUserFountains((prev) =>
+                prev.map((f) => (f.id === updated.id ? updated : f))
+              );
+            }}
+            onFountainDeleted={() => {
+              if (selectedFountain && typeof selectedFountain.id === "string") {
+                setUserFountains((prev) =>
+                  prev.filter((f) => f.id !== selectedFountain.id)
+                );
+                setSelectedFountain(null);
+                setSheetContent(null);
+              }
+            }}
             onSavedChanged={refetchSavedFountains}
           />
         )}
@@ -593,12 +628,35 @@ export default function Home() {
           />
         )}
       </BottomSheet>
+
+      {showLeafSavedPopup && (
+        <View style={styles.leafSavedWrap} pointerEvents="none">
+          <LottieView
+            source={require("../../assets/icons/JitterFiles/NewLoAdded.json")}
+            autoPlay
+            loop={false}
+            onAnimationFinish={handleLeafSavedFinish}
+            style={styles.leafSavedLottie}
+          />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  leafSavedWrap: {
+    position: "absolute",
+    top: 48,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  leafSavedLottie: {
+    width: 300,
+    height: 300,
+  },
   overlay: {
     position: "absolute",
     top: 0,

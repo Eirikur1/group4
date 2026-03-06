@@ -80,8 +80,8 @@ export default function Map({
       {
         latitude: pendingAddCoordinate.latitude,
         longitude: pendingAddCoordinate.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
+        latitudeDelta: 0.001,
+        longitudeDelta: 0.001,
       },
       250,
     );
@@ -103,6 +103,7 @@ export default function Map({
         ref={mapRef}
         style={styles.map}
         initialRegion={initialRegion}
+        maxZoomLevel={21}
         onPress={onMapPress}
         onLongPress={
           onLongPress
@@ -123,6 +124,7 @@ export default function Map({
               latitude: pendingAddCoordinate.latitude,
               longitude: pendingAddCoordinate.longitude,
             }}
+            anchor={{ x: 0.5, y: 1 }}
             image={require("../../assets/icons/AddPin.png")}
             title="New location"
           />
@@ -134,6 +136,7 @@ export default function Map({
               latitude: fountain.latitude,
               longitude: fountain.longitude,
             }}
+            anchor={{ x: 0.5, y: 1 }}
             title={fountain.name}
             description={fountain.description}
             image={

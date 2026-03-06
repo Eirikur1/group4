@@ -1,12 +1,15 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
+import * as ImagePicker from "expo-image-picker";
 import MenuItem from "./MenuItem";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
+import { getMyProfile, uploadAvatar } from "../lib/profile";
+import { getRefillCount, logRefill } from "../lib/refills";
 import HeartLogo from "../../assets/icons/HeartLogo.svg";
 
 interface ProfileMenuProps {
@@ -19,6 +22,76 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) {
   const navigation = useNavigation<NavProp>();
   const { isSignedIn, user } = useAuth();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [refillCount, setRefillCount] = useState<number>(0);
+  const [loggingRefill, setLoggingRefill] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setAvatarUrl(null);
+      setRefillCount(0);
+      return;
+    }
+    let cancelled = false;
+    getMyProfile(user.id).then((profile) => {
+      if (!cancelled && profile?.avatarUrl) setAvatarUrl(profile.avatarUrl);
+      else if (!cancelled) setAvatarUrl(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    getRefillCount(user.id).then((count) => {
+      if (!cancelled) setRefillCount(count);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const handleLogRefill = async () => {
+    if (!user?.id || loggingRefill) return;
+    setLoggingRefill(true);
+    try {
+      const ok = await logRefill(user.id, null);
+      if (ok) setRefillCount((c) => c + 1);
+    } finally {
+      setLoggingRefill(false);
+    }
+  };
+
+  const handleAvatarPress = async () => {
+    if (!user?.id || uploadingAvatar) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Allow access to your photos to set a profile picture.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    setUploadingAvatar(true);
+    try {
+      const url = await uploadAvatar(user.id, result.assets[0].uri);
+      setAvatarUrl(url);
+    } catch (e) {
+      Alert.alert(
+        "Upload failed",
+        e instanceof Error ? e.message : "Could not update profile picture."
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   const handleSignInClick = () => {
     navigation.navigate("SignIn");
@@ -34,15 +107,34 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.userSection}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={24} color="#666" />
-          </View>
+          <Pressable
+            style={styles.avatar}
+            onPress={isSignedIn ? handleAvatarPress : undefined}
+            disabled={uploadingAvatar}
+            accessibilityLabel={isSignedIn ? "Change profile picture" : undefined}
+          >
+            {uploadingAvatar ? (
+              <ActivityIndicator size="small" color="#666" />
+            ) : avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                style={StyleSheet.absoluteFillObject}
+                resizeMode="cover"
+              />
+            ) : (
+              <Ionicons name="person" size={24} color="#666" />
+            )}
+          </Pressable>
           <View style={styles.userInfo}>
             <Text style={styles.userName}>
               {isSignedIn ? user?.email ?? "User" : "Guest"}
             </Text>
             <Text style={styles.stats}>
-              {isSignedIn ? "★ Refills" : "No refills"}
+              {isSignedIn
+                ? refillCount === 0
+                  ? "No refills yet"
+                  : `${refillCount} refill${refillCount === 1 ? "" : "s"}`
+                : "No refills"}
             </Text>
           </View>
         </View>
@@ -51,6 +143,12 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
       <View style={styles.menu}>
         {isSignedIn && (
           <>
+            <MenuItem
+              icon={<Ionicons name="add-circle-outline" size={20} color="#333" />}
+              title="Log a refill"
+              subtitle="Count a refill (e.g. if you didn’t tap at the station)"
+              onClick={handleLogRefill}
+            />
             <MenuItem
               icon={<Ionicons name="bookmark" size={20} color="#333" />}
               title="Favorites"
@@ -102,6 +200,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+    overflow: "hidden",
   },
   userInfo: { flex: 1 },
   userName: { fontSize: 18, fontWeight: "600", color: "#000" },

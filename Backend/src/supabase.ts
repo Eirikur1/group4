@@ -17,6 +17,20 @@ export interface WaterSourceRow {
   rating: number | null;
   is_operational: boolean;
   created_at?: string;
+  created_by?: string | null;
+}
+
+export interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+/** Creator info attached to a water source response */
+export interface CreatedByInfo {
+  id: string;
+  displayName?: string;
+  avatarUrl?: string;
 }
 
 /** Shape returned to frontend (Fountain with useAdminPin: false) */
@@ -30,10 +44,14 @@ export interface WaterSourceResponse {
   rating?: number;
   isOperational: boolean;
   useAdminPin: false;
+  createdBy?: CreatedByInfo;
 }
 
-function toResponse(row: WaterSourceRow): WaterSourceResponse {
-  return {
+function toResponse(
+  row: WaterSourceRow,
+  creator?: ProfileRow | null
+): WaterSourceResponse {
+  const res: WaterSourceResponse = {
     id: row.id,
     name: row.name,
     latitude: row.latitude,
@@ -44,6 +62,14 @@ function toResponse(row: WaterSourceRow): WaterSourceResponse {
     isOperational: row.is_operational ?? true,
     useAdminPin: false,
   };
+  if (row.created_by) {
+    res.createdBy = {
+      id: row.created_by,
+      displayName: creator?.display_name ?? undefined,
+      avatarUrl: creator?.avatar_url ?? undefined,
+    };
+  }
+  return res;
 }
 
 /** Fetch average rating per water_source_id from ratings table (empty if table missing). */
@@ -72,14 +98,28 @@ export async function getWaterSources(): Promise<WaterSourceResponse[]> {
   const [sourcesResult, averages] = await Promise.all([
     supabase
       .from(TABLE)
-      .select("id, name, latitude, longitude, images, rating, is_operational")
+      .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
       .order("created_at", { ascending: false }),
     getAverageRatings(),
   ]);
   if (sourcesResult.error) return [];
   const rows = (sourcesResult.data ?? []) as WaterSourceRow[];
+  const creatorIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))] as string[];
+  let profilesMap = new Map<string, ProfileRow>();
+  if (creatorIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url")
+      .in("id", creatorIds);
+    if (!profilesError && profiles) {
+      for (const p of profiles as ProfileRow[]) {
+        profilesMap.set(p.id, p);
+      }
+    }
+  }
   return rows.map((row) => {
-    const res = toResponse(row);
+    const creator = row.created_by ? profilesMap.get(row.created_by) : undefined;
+    const res = toResponse(row, creator);
     const avg = averages.get(row.id);
     if (avg != null) res.rating = avg;
     return res;
@@ -96,9 +136,15 @@ export interface InsertWaterSourceBody {
 
 export async function addImagesToWaterSource(
   id: string,
-  newImages: string[]
+  newImages: string[],
+  userId?: string | null
 ): Promise<WaterSourceResponse | null> {
   if (!supabase) return null;
+  if (userId != null) {
+    const ownerId = await getWaterSourceOwnerId(id);
+    // Allow if user is the owner, or if there is no owner (legacy location)
+    if (ownerId != null && ownerId !== userId) return null;
+  }
   const { data: existing } = await supabase
     .from(TABLE)
     .select("images")
@@ -117,7 +163,8 @@ export async function addImagesToWaterSource(
 }
 
 export async function insertWaterSource(
-  body: InsertWaterSourceBody
+  body: InsertWaterSourceBody,
+  createdBy: string | null
 ): Promise<WaterSourceResponse | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
@@ -129,9 +176,94 @@ export async function insertWaterSource(
       images: body.images ?? [],
       rating: body.rating ?? null,
       is_operational: true,
+      created_by: createdBy ?? null,
     })
-    .select("id, name, latitude, longitude, images, rating, is_operational")
+    .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
     .single();
   if (error) throw error;
-  return data ? toResponse(data as WaterSourceRow) : null;
+  const row = data as WaterSourceRow;
+  let creator: ProfileRow | null = null;
+  if (row.created_by) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url")
+      .eq("id", row.created_by)
+      .single();
+    creator = profile as ProfileRow | null;
+  }
+  return toResponse(row, creator);
+}
+
+/** Returns the created_by user id for the water source, or null. */
+export async function getWaterSourceOwnerId(id: string): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("created_by")
+    .eq("id", id)
+    .single();
+  if (error || !data) return null;
+  return (data as { created_by: string | null }).created_by ?? null;
+}
+
+export async function deleteWaterSource(
+  id: string,
+  userId: string
+): Promise<boolean> {
+  if (!supabase) return false;
+  const ownerId = await getWaterSourceOwnerId(id);
+  if (ownerId !== userId) return false;
+  const { error } = await supabase.from(TABLE).delete().eq("id", id);
+  return !error;
+}
+
+export interface UpdateWaterSourceBody {
+  name?: string;
+}
+
+export async function updateWaterSource(
+  id: string,
+  body: UpdateWaterSourceBody,
+  userId: string
+): Promise<WaterSourceResponse | null> {
+  if (!supabase) return null;
+  const ownerId = await getWaterSourceOwnerId(id);
+  if (ownerId !== userId) return null;
+  const updates: { name?: string } = {};
+  if (body.name !== undefined) updates.name = (body.name ?? "").trim();
+  if (Object.keys(updates).length === 0) {
+    const { data } = await supabase
+      .from(TABLE)
+      .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+      .eq("id", id)
+      .single();
+    const row = data as WaterSourceRow | null;
+    if (!row) return null;
+    const { data: profile } = row.created_by
+      ? await supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url")
+          .eq("id", row.created_by)
+          .single()
+      : { data: null };
+    return toResponse(row, profile as ProfileRow | null);
+  }
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update(updates)
+    .eq("id", id)
+    .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+    .single();
+  if (error) throw error;
+  const row = data as WaterSourceRow;
+  let creator: ProfileRow | null = null;
+  if (row.created_by) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url")
+      .eq("id", row.created_by)
+      .single();
+    creator = profile as ProfileRow | null;
+  }
+  return toResponse(row, creator);
 }
