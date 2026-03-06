@@ -648,7 +648,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   leafSavedWrap: {
     position: "absolute",
-    top: 48,
+    top: 24,
     left: 0,
     right: 0,
     alignItems: "center",
