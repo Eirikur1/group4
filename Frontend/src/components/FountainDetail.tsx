@@ -1,4 +1,10 @@
-import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  useEffect,
+} from "react";
 import {
   View,
   Text,
@@ -67,11 +73,22 @@ const fountainRegion = (f: Fountain) => ({
   longitudeDelta: 0.005,
 });
 
-function PhotoTile({ uri, width, marginRight }: { uri: string; width: number; marginRight: number }) {
+function PhotoTile({
+  uri,
+  width,
+  marginRight,
+}: {
+  uri: string;
+  width: number;
+  marginRight: number;
+}) {
   return (
     <ImageWithSkeleton
       uri={uri}
-      containerStyle={StyleSheet.flatten([styles.carouselImage, { width, marginRight }])}
+      containerStyle={StyleSheet.flatten([
+        styles.carouselImage,
+        { width, marginRight },
+      ])}
       imageStyle={StyleSheet.absoluteFillObject}
       resizeMode="cover"
       skeletonBorderRadius={10}
@@ -110,7 +127,9 @@ export default function FountainDetail({
   const [loggingRefill, setLoggingRefill] = useState(false);
   const [showRefillToast, setShowRefillToast] = useState(false);
   const refillLottieRef = useRef<LottieView>(null);
-  const refillToastHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refillToastHideTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   // Creator can add photos; if there is no creator (legacy location), any signed-in user can add.
   const isOwner =
@@ -154,7 +173,7 @@ export default function FountainDetail({
   const snapOffsets = useMemo(() => {
     if (totalSlides <= 1) return [0];
     const finalSnap = Math.round(
-      (totalSlides - 1) * (ITEM_W + IMG_GAP) + 1.5 * ITEM_W - CAROUSEL_W
+      (totalSlides - 1) * (ITEM_W + IMG_GAP) + 1.5 * ITEM_W - CAROUSEL_W,
     );
     if (finalSnap <= 0) return [0]; // everything fits, no scroll needed
     const offsets: number[] = [0];
@@ -171,32 +190,42 @@ export default function FountainDetail({
     setCarouselIndex(0);
   }
 
-  const uploadUris = useCallback(async (uris: string[]) => {
-    if (!uris.length || !onPhotosAdded) return;
-    const previousImages = fountain.images ?? (fountain.imageUrl ? [fountain.imageUrl] : []);
-    const optimisticImages = [...previousImages, ...uris];
-    onPhotosAdded({ ...fountain, images: optimisticImages });
-    setAddingPhoto(true);
-    try {
-      const newUrls = await uploadFountainPhotos(uris);
-      const updated = await addPhotosToWaterSource(
-        String(fountain.id),
-        newUrls,
-        session?.access_token
-      );
-      if (updated) onPhotosAdded(updated);
-    } catch (e) {
-      onPhotosAdded({ ...fountain, images: previousImages });
-      Alert.alert("Upload failed", e instanceof Error ? e.message : "Could not add photos.");
-    } finally {
-      setAddingPhoto(false);
-    }
-  }, [fountain, onPhotosAdded]);
+  const uploadUris = useCallback(
+    async (uris: string[]) => {
+      if (!uris.length || !onPhotosAdded) return;
+      const previousImages =
+        fountain.images ?? (fountain.imageUrl ? [fountain.imageUrl] : []);
+      const optimisticImages = [...previousImages, ...uris];
+      onPhotosAdded({ ...fountain, images: optimisticImages });
+      setAddingPhoto(true);
+      try {
+        const newUrls = await uploadFountainPhotos(uris);
+        const updated = await addPhotosToWaterSource(
+          String(fountain.id),
+          newUrls,
+          session?.access_token,
+        );
+        if (updated) onPhotosAdded(updated);
+      } catch (e) {
+        onPhotosAdded({ ...fountain, images: previousImages });
+        Alert.alert(
+          "Upload failed",
+          e instanceof Error ? e.message : "Could not add photos.",
+        );
+      } finally {
+        setAddingPhoto(false);
+      }
+    },
+    [fountain, onPhotosAdded],
+  );
 
   const addFromLibrary = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Allow access to your photos to add images.");
+      Alert.alert(
+        "Permission needed",
+        "Allow access to your photos to add images.",
+      );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -240,14 +269,14 @@ export default function FountainDetail({
         [
           { text: "Cancel", style: "cancel" },
           { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
-        ]
+        ],
       );
       return;
     }
     if (typeof fountain.id !== "string") {
       Alert.alert(
         "Not supported",
-        "Only database-backed fountains can be saved right now."
+        "Only database-backed fountains can be saved right now.",
       );
       return;
     }
@@ -260,15 +289,13 @@ export default function FountainDetail({
       setSaved(previous);
       Alert.alert(
         "Save failed",
-        e instanceof Error ? e.message : "Could not update saved location."
+        e instanceof Error ? e.message : "Could not update saved location.",
       );
     }
   }, [isSignedIn, fountain.id, saved, onSavedChanged, navigation]);
 
   const canRate =
-    isSignedIn &&
-    typeof fountain.id === "string" &&
-    onRatingChanged != null;
+    isSignedIn && typeof fountain.id === "string" && onRatingChanged != null;
   const handleRate = useCallback(
     async (rating: number) => {
       if (!canRate || typeof fountain.id !== "string") return;
@@ -282,11 +309,11 @@ export default function FountainDetail({
         onRatingChanged?.({ ...fountain, rating: previousRating });
         Alert.alert(
           "Rating failed",
-          e instanceof Error ? e.message : "Could not save rating."
+          e instanceof Error ? e.message : "Could not save rating.",
         );
       }
     },
-    [canRate, fountain, onRatingChanged]
+    [canRate, fountain, onRatingChanged],
   );
 
   const handleDelete = useCallback(() => {
@@ -309,22 +336,29 @@ export default function FountainDetail({
             } catch (e) {
               Alert.alert(
                 "Delete failed",
-                e instanceof Error ? e.message : "Could not delete location."
+                e instanceof Error ? e.message : "Could not delete location.",
               );
             } finally {
               setDeleting(false);
             }
           },
         },
-      ]
+      ],
     );
-  }, [fountain.id, fountain.name, session?.access_token, onFountainDeleted, navigation]);
+  }, [
+    fountain.id,
+    fountain.name,
+    session?.access_token,
+    onFountainDeleted,
+    navigation,
+  ]);
 
   const handleRefillHere = useCallback(async () => {
     if (!user?.id || loggingRefill) return;
     setLoggingRefill(true);
     try {
-      const waterSourceId = typeof fountain.id === "string" ? fountain.id : null;
+      const waterSourceId =
+        typeof fountain.id === "string" ? fountain.id : null;
       await logRefill(user.id, waterSourceId);
       if (refillToastHideTimeoutRef.current) {
         clearTimeout(refillToastHideTimeoutRef.current);
@@ -366,7 +400,7 @@ export default function FountainDetail({
       const updated = await updateWaterSource(
         fountain.id,
         { name },
-        session?.access_token
+        session?.access_token,
       );
       if (updated) {
         onFountainUpdated?.(updated);
@@ -375,7 +409,7 @@ export default function FountainDetail({
     } catch (e) {
       Alert.alert(
         "Update failed",
-        e instanceof Error ? e.message : "Could not update location."
+        e instanceof Error ? e.message : "Could not update location.",
       );
     } finally {
       setSavingEdit(false);
@@ -384,281 +418,319 @@ export default function FountainDetail({
 
   return (
     <View style={styles.container}>
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={styles.scrollContent}
-      showsVerticalScrollIndicator={false}
-      bounces={true}
-      alwaysBounceVertical={true}
-    >
-      <View style={styles.mapBlock}>
-        <View style={styles.mapWrap}>
-          <MapView
-            style={styles.mapImage}
-            initialRegion={fountainRegion(fountain)}
-            scrollEnabled={false}
-            zoomEnabled={false}
-            pitchEnabled={false}
-            rotateEnabled={false}
-            customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
-            mapType={(Platform.OS === "ios" ? "muted" : undefined) as "standard" | "satellite" | "hybrid" | undefined}
-          >
-            <Marker
-              coordinate={{
-                latitude: fountain.latitude,
-                longitude: fountain.longitude,
-              }}
-              anchor={{ x: 0.5, y: 1 }}
-              tracksViewChanges={false}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        alwaysBounceVertical={true}
+      >
+        <View style={styles.mapBlock}>
+          <View style={styles.mapWrap}>
+            <MapView
+              style={styles.mapImage}
+              initialRegion={fountainRegion(fountain)}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              pitchEnabled={false}
+              rotateEnabled={false}
+              customMapStyle={
+                Platform.OS === "android" ? darkMapStyle : undefined
+              }
+              mapType={
+                (Platform.OS === "ios" ? "muted" : undefined) as
+                  | "standard"
+                  | "satellite"
+                  | "hybrid"
+                  | undefined
+              }
             >
-              <Image
-                source={require("../../assets/icons/PinIcon.png")}
-                style={styles.mapPin}
-                resizeMode="contain"
-              />
-            </Marker>
-          </MapView>
-        </View>
-        <View style={styles.mapSaveOverlay} pointerEvents="box-none">
-          {isSignedIn ? (
+              <Marker
+                coordinate={{
+                  latitude: fountain.latitude,
+                  longitude: fountain.longitude,
+                }}
+                anchor={{ x: 0.5, y: 1 }}
+                tracksViewChanges={false}
+              >
+                <Image
+                  source={require("../../assets/icons/PinIcon.png")}
+                  style={styles.mapPin}
+                  resizeMode="contain"
+                />
+              </Marker>
+            </MapView>
+          </View>
+          <View style={styles.mapSaveOverlay} pointerEvents="box-none">
+            {isSignedIn ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.mapRefillButton,
+                  pressed && styles.mapRefillButtonPressed,
+                ]}
+                onPress={handleRefillHere}
+                disabled={loggingRefill}
+                accessibilityLabel="I refilled here"
+              >
+                <View style={styles.mapRefillIconCircle}>
+                  {loggingRefill ? (
+                    <ActivityIndicator size="small" color="#3A9BDC" />
+                  ) : (
+                    <Ionicons name="water" size={16} color="#3A9BDC" />
+                  )}
+                </View>
+              </Pressable>
+            ) : (
+              <View style={styles.mapRefillButtonPlaceholder} />
+            )}
             <Pressable
               style={({ pressed }) => [
-                styles.mapRefillButton,
-                pressed && styles.mapRefillButtonPressed,
+                styles.mapSaveButton,
+                pressed && styles.mapSaveButtonPressed,
               ]}
-              onPress={handleRefillHere}
-              disabled={loggingRefill}
-              accessibilityLabel="I refilled here"
+              onPress={onToggleSaved ?? handleToggleSaved}
+              accessibilityLabel={
+                !isSignedIn
+                  ? "Sign in to save location"
+                  : (savedProp ?? saved)
+                    ? "Remove from saved"
+                    : "Save location"
+              }
             >
-              <View style={styles.mapRefillIconCircle}>
-                {loggingRefill ? (
-                  <ActivityIndicator size="small" color="#3A9BDC" />
-                ) : (
-                  <Ionicons name="water" size={16} color="#3A9BDC" />
-                )}
+              <View style={styles.mapSaveIconCircle}>
+                <SavedIcon size={18} filled={savedProp ?? saved} />
               </View>
             </Pressable>
-          ) : (
-            <View style={styles.mapRefillButtonPlaceholder} />
-          )}
-          <Pressable
-            style={({ pressed }) => [
-              styles.mapSaveButton,
-              pressed && styles.mapSaveButtonPressed,
-            ]}
-            onPress={onToggleSaved ?? handleToggleSaved}
-            accessibilityLabel={
-              !isSignedIn
-                ? "Sign in to save location"
-                : (savedProp ?? saved)
-                  ? "Remove from saved"
-                  : "Save location"
-            }
-          >
-            <View style={styles.mapSaveIconCircle}>
-              <SavedIcon
-                size={18}
-                filled={savedProp ?? saved}
-              />
-            </View>
-          </Pressable>
-        </View>
-        <View style={styles.belowMap}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={2}>
-              {fountain.name}
-            </Text>
-            <View style={styles.titleRight}>
-              {fountain.category ? (
-                <Text style={styles.category}>{fountain.category}</Text>
-              ) : null}
-              {fountain.rating != null && (
-                <View style={styles.rating}>
-                  <Text style={styles.ratingValue}>{fountain.rating}</Text>
-                  <StarFullIcon width={18} height={18} fill="#FFD700" color="#FFD700" />
-                </View>
-              )}
-            </View>
           </View>
-          {/* Image carousel — last tile is the add-photo button when allowed */}
-          {(urls.length > 0 || canAddPhotos) && (
-            <View style={styles.imageBlock}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToOffsets={snapOffsets}
-                decelerationRate="fast"
-                bounces={false}
-                style={{ width: CAROUSEL_W }}
-                onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(
-                    e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP)
-                  );
-                  setCarouselIndex(idx);
-                }}
+          <View style={styles.belowMap}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title} numberOfLines={2}>
+                {fountain.name}
+              </Text>
+              <View style={styles.titleRight}>
+                {fountain.category ? (
+                  <Text style={styles.category}>{fountain.category}</Text>
+                ) : null}
+                {fountain.rating != null && (
+                  <View style={styles.rating}>
+                    <Text style={styles.ratingValue}>{fountain.rating}</Text>
+                    <StarFullIcon
+                      width={18}
+                      height={18}
+                      fill="#FFD700"
+                      color="#FFD700"
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
+            {/* Image carousel — last tile is the add-photo button when allowed */}
+            {(urls.length > 0 || canAddPhotos) && (
+              <View style={styles.imageBlock}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToOffsets={snapOffsets}
+                  decelerationRate="fast"
+                  bounces={false}
+                  style={{ width: CAROUSEL_W }}
+                  onMomentumScrollEnd={(e) => {
+                    const idx = Math.round(
+                      e.nativeEvent.contentOffset.x / (ITEM_W + IMG_GAP),
+                    );
+                    setCarouselIndex(idx);
+                  }}
+                >
+                  {urls.map((uri, i) => (
+                    <PhotoTile
+                      key={`${uri}-${i}`}
+                      uri={uri}
+                      width={ITEM_W}
+                      // Last image before add-photo still needs a gap; last image
+                      // overall (no add-photo) has no trailing margin so content ends flush.
+                      marginRight={
+                        i < urls.length - 1 || canAddPhotos ? IMG_GAP : 0
+                      }
+                    />
+                  ))}
+                  {canAddPhotos && (
+                    <Pressable
+                      // marginRight = ITEM_W/2 extends content so max scroll == finalSnap.
+                      style={[
+                        styles.carouselImage,
+                        styles.addPhotoSlide,
+                        { width: ITEM_W, marginRight: Math.round(ITEM_W / 2) },
+                      ]}
+                      onPress={handleAddPhoto}
+                      disabled={addingPhoto}
+                      accessibilityLabel="Add photo"
+                    >
+                      {addingPhoto ? (
+                        <ActivityIndicator color="#3A9BDC" />
+                      ) : (
+                        <>
+                          <Ionicons name="add" size={28} color="#3A9BDC" />
+                          <Text style={styles.addPhotoSlideText}>
+                            Add photo
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+            {(fountain.description ?? "").trim() ? (
+              <Text style={styles.shortDescription} numberOfLines={3}>
+                {fountain.description!.trim()}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.strokeFrame}>
+            {fountain.distance ? (
+              <Text style={styles.distanceAboveButton}>
+                {fountain.distance}
+              </Text>
+            ) : null}
+            <View style={styles.extraSection}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.directionsButton,
+                  pressed && styles.directionsButtonPressed,
+                ]}
+                onPress={() =>
+                  openDirections(
+                    fountain.latitude,
+                    fountain.longitude,
+                    fountain.name,
+                  )
+                }
               >
-                {urls.map((uri, i) => (
-                  <PhotoTile
-                    key={`${uri}-${i}`}
-                    uri={uri}
-                    width={ITEM_W}
-                    // Last image before add-photo still needs a gap; last image
-                    // overall (no add-photo) has no trailing margin so content ends flush.
-                    marginRight={(i < urls.length - 1 || canAddPhotos) ? IMG_GAP : 0}
-                  />
-                ))}
-                {canAddPhotos && (
+                <Ionicons name="navigate" size={20} color="#FFFFFF" />
+                <Text style={styles.directionsButtonText}>Get directions</Text>
+              </Pressable>
+              {isOwner && (
+                <View style={styles.ownerActionsRow}>
                   <Pressable
-                    // marginRight = ITEM_W/2 extends content so max scroll == finalSnap.
-                    style={[styles.carouselImage, styles.addPhotoSlide, { width: ITEM_W, marginRight: Math.round(ITEM_W / 2) }]}
-                    onPress={handleAddPhoto}
-                    disabled={addingPhoto}
-                    accessibilityLabel="Add photo"
+                    style={({ pressed }) => [
+                      styles.ownerActionButton,
+                      pressed && styles.ownerActionButtonPressed,
+                    ]}
+                    onPress={() => {
+                      setEditName(fountain.name);
+                      setEditModalVisible(true);
+                    }}
+                    disabled={deleting}
+                    accessibilityLabel="Edit location"
                   >
-                    {addingPhoto ? (
-                      <ActivityIndicator color="#3A9BDC" />
+                    <Ionicons name="pencil" size={18} color="#3A9BDC" />
+                    <Text style={styles.ownerActionText}>Edit</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.ownerActionButton,
+                      styles.ownerActionButtonDanger,
+                      pressed && styles.ownerActionButtonPressed,
+                    ]}
+                    onPress={handleDelete}
+                    disabled={deleting}
+                    accessibilityLabel="Delete location"
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color="#DC2626" />
                     ) : (
                       <>
-                        <Ionicons name="add" size={28} color="#3A9BDC" />
-                        <Text style={styles.addPhotoSlideText}>Add photo</Text>
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color="#DC2626"
+                        />
+                        <Text
+                          style={[
+                            styles.ownerActionText,
+                            styles.ownerActionTextDanger,
+                          ]}
+                        >
+                          Delete
+                        </Text>
                       </>
                     )}
                   </Pressable>
-                )}
-              </ScrollView>
+                </View>
+              )}
             </View>
-          )}
-          {(fountain.description ?? "").trim() ? (
-            <Text style={styles.shortDescription} numberOfLines={3}>
-              {fountain.description!.trim()}
-            </Text>
-          ) : null}
+
+            <View style={styles.contentRest}>
+              <View style={styles.ratingSection}>
+                <Text style={styles.ratingQuestion}>
+                  How would you rate the water?
+                </Text>
+                <Text style={styles.ratingSubtitle}>We'd love to know!</Text>
+                <View style={styles.starsRow}>
+                  <StarRating
+                    rating={fountain.rating}
+                    size={28}
+                    onRate={canRate ? handleRate : undefined}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {typeof fountain.id === "string" && (
+              <Text style={styles.addedByFooter} numberOfLines={1}>
+                Added by {fountain.createdBy?.displayName ?? "Someone"}
+              </Text>
+            )}
+          </View>
         </View>
-        <View style={styles.strokeFrame}>
-          {fountain.distance ? (
-            <Text style={styles.distanceAboveButton}>{fountain.distance}</Text>
-          ) : null}
-          <View style={styles.extraSection}>
+
+        <Modal
+          visible={editModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setEditModalVisible(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setEditModalVisible(false)}
+          >
             <Pressable
-              style={({ pressed }) => [
-                styles.directionsButton,
-                pressed && styles.directionsButtonPressed,
-              ]}
-              onPress={() =>
-                openDirections(fountain.latitude, fountain.longitude, fountain.name)
-              }
+              style={styles.modalContent}
+              onPress={(e) => e.stopPropagation()}
             >
-              <Ionicons name="navigate" size={20} color="#FFFFFF" />
-              <Text style={styles.directionsButtonText}>Get directions</Text>
-            </Pressable>
-            {isOwner && (
-              <View style={styles.ownerActionsRow}>
+              <Text style={styles.modalTitle}>Edit location name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Location name"
+                placeholderTextColor="#9CA3AF"
+                editable={!savingEdit}
+              />
+              <View style={styles.modalButtons}>
                 <Pressable
-                  style={({ pressed }) => [
-                    styles.ownerActionButton,
-                    pressed && styles.ownerActionButtonPressed,
-                  ]}
-                  onPress={() => {
-                    setEditName(fountain.name);
-                    setEditModalVisible(true);
-                  }}
-                  disabled={deleting}
-                  accessibilityLabel="Edit location"
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => setEditModalVisible(false)}
+                  disabled={savingEdit}
                 >
-                  <Ionicons name="pencil" size={18} color="#3A9BDC" />
-                  <Text style={styles.ownerActionText}>Edit</Text>
+                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
                 </Pressable>
                 <Pressable
-                  style={({ pressed }) => [
-                    styles.ownerActionButton,
-                    styles.ownerActionButtonDanger,
-                    pressed && styles.ownerActionButtonPressed,
-                  ]}
-                  onPress={handleDelete}
-                  disabled={deleting}
-                  accessibilityLabel="Delete location"
+                  style={[styles.modalButton, styles.modalButtonSave]}
+                  onPress={handleSaveEdit}
+                  disabled={savingEdit || !editName.trim()}
                 >
-                  {deleting ? (
-                    <ActivityIndicator size="small" color="#DC2626" />
+                  {savingEdit ? (
+                    <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <>
-                      <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                      <Text style={[styles.ownerActionText, styles.ownerActionTextDanger]}>Delete</Text>
-                    </>
+                    <Text style={styles.modalButtonSaveText}>Save</Text>
                   )}
                 </Pressable>
               </View>
-            )}
-          </View>
-
-          <View style={styles.contentRest}>
-            <View style={styles.ratingSection}>
-              <Text style={styles.ratingQuestion}>
-                How would you rate the water?
-              </Text>
-              <Text style={styles.ratingSubtitle}>We'd love to know!</Text>
-              <View style={styles.starsRow}>
-                <StarRating
-                  rating={fountain.rating}
-                  size={28}
-                  onRate={canRate ? handleRate : undefined}
-                />
-              </View>
-            </View>
-          </View>
-
-          {typeof fountain.id === "string" && (
-            <Text style={styles.addedByFooter} numberOfLines={1}>
-              Added by {fountain.createdBy?.displayName ?? "Someone"}
-            </Text>
-          )}
-        </View>
-      </View>
-
-      <Modal
-        visible={editModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setEditModalVisible(false)}
-        >
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>Edit location name</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Location name"
-              placeholderTextColor="#9CA3AF"
-              editable={!savingEdit}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setEditModalVisible(false)}
-                disabled={savingEdit}
-              >
-                <Text style={styles.modalButtonCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalButton, styles.modalButtonSave]}
-                onPress={handleSaveEdit}
-                disabled={savingEdit || !editName.trim()}
-              >
-                {savingEdit ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.modalButtonSaveText}>Save</Text>
-                )}
-              </Pressable>
-            </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
-    </ScrollView>
+        </Modal>
+      </ScrollView>
 
       {showRefillToast && (
         <View style={styles.refillToastWrap} pointerEvents="none">
@@ -961,7 +1033,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
   },
-  modalTitle: { fontSize: 18, fontWeight: "700", color: "#111", marginBottom: 16 },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111",
+    marginBottom: 16,
+  },
   modalInput: {
     borderWidth: 1,
     borderColor: "#D1D5DB",
