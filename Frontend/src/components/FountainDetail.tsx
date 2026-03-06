@@ -38,6 +38,7 @@ import {
 import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
 import { submitRating, getAverageRating } from "../lib/ratings";
 import { logRefill } from "../lib/refills";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import SavedIcon from "./SavedIcon";
 import ImageWithSkeleton from "./ImageWithSkeleton";
@@ -126,10 +127,15 @@ export default function FountainDetail({
   const [deleting, setDeleting] = useState(false);
   const [loggingRefill, setLoggingRefill] = useState(false);
   const [showRefillToast, setShowRefillToast] = useState(false);
+  const [showSavedLottie, setShowSavedLottie] = useState(false);
   const refillLottieRef = useRef<LottieView>(null);
   const refillToastHideTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const savedLottieHideTimeoutRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const insets = useSafeAreaInsets();
 
   // Creator can add photos; if there is no creator (legacy location), any signed-in user can add.
   const isOwner =
@@ -285,6 +291,16 @@ export default function FountainDetail({
     onSavedChanged?.();
     try {
       await toggleSavedLocation(fountain.id);
+      if (!previous) {
+        setShowSavedLottie(true);
+        if (savedLottieHideTimeoutRef.current) {
+          clearTimeout(savedLottieHideTimeoutRef.current);
+        }
+        savedLottieHideTimeoutRef.current = setTimeout(() => {
+          savedLottieHideTimeoutRef.current = null;
+          setShowSavedLottie(false);
+        }, 5000);
+      }
     } catch (e) {
       setSaved(previous);
       Alert.alert(
@@ -384,10 +400,21 @@ export default function FountainDetail({
     setShowRefillToast(false);
   }, []);
 
+  const handleSavedLottieFinish = useCallback(() => {
+    if (savedLottieHideTimeoutRef.current) {
+      clearTimeout(savedLottieHideTimeoutRef.current);
+      savedLottieHideTimeoutRef.current = null;
+    }
+    setShowSavedLottie(false);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (refillToastHideTimeoutRef.current) {
         clearTimeout(refillToastHideTimeoutRef.current);
+      }
+      if (savedLottieHideTimeoutRef.current) {
+        clearTimeout(savedLottieHideTimeoutRef.current);
       }
     };
   }, []);
@@ -733,14 +760,34 @@ export default function FountainDetail({
       </ScrollView>
 
       {showRefillToast && (
-        <View style={styles.refillToastWrap} pointerEvents="none">
+        <View
+          style={[styles.refillToastWrap, { paddingTop: insets.top }]}
+          pointerEvents="none"
+        >
           <View style={styles.refillToast}>
             <LottieView
               ref={refillLottieRef}
-              source={require("../../assets/icons/JitterFiles/BlueRefillAdd.json")}
+              source={require("../../assets/icons/JitterFiles/RefillSavedFinal.json")}
               autoPlay
               loop={false}
               onAnimationFinish={handleRefillLottieFinish}
+              style={styles.refillToastLottie}
+            />
+          </View>
+        </View>
+      )}
+
+      {showSavedLottie && (
+        <View
+          style={[styles.refillToastWrap, { paddingTop: insets.top }]}
+          pointerEvents="none"
+        >
+          <View style={styles.refillToast}>
+            <LottieView
+              source={require("../../assets/icons/JitterFiles/RefillSavedFinal.json")}
+              autoPlay
+              loop={false}
+              onAnimationFinish={handleSavedLottieFinish}
               style={styles.refillToastLottie}
             />
           </View>
@@ -1057,7 +1104,7 @@ const styles = StyleSheet.create({
   modalButtonSaveText: { fontSize: 15, fontWeight: "600", color: "#FFF" },
   refillToastWrap: {
     position: "absolute",
-    top: 48,
+    top: 0,
     left: 0,
     right: 0,
     alignItems: "center",
@@ -1067,7 +1114,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   refillToastLottie: {
-    width: 200,
-    height: 200,
+    width: 300,
+    height: 300,
   },
 });
