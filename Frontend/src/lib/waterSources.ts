@@ -193,46 +193,42 @@ export async function getOrCreateWaterSourceForOsm(
   }
 }
 
-/** Append new image URLs to an existing user-uploaded water source. Creator only; pass accessToken. */
+/**
+ * Save a complete image list to a water source (single UPDATE, no extra SELECT).
+ * Pass the full final array — caller is responsible for merging old + new images.
+ * Requires the "Allow update own or public" RLS policy on water_sources.
+ */
 export async function addPhotosToWaterSource(
   id: string,
-  images: string[],
-  accessToken: string | undefined
+  allImages: string[],
+  _accessToken: string | undefined
 ): Promise<Fountain | null> {
-  const base = getBaseUrl();
-  if (!base) throw new Error("Backend URL not set.");
-  if (!accessToken) throw new Error("Sign in to add photos.");
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${base}/api/water-sources/${id}/images`, {
-      method: "PATCH",
-      headers: authHeaders(accessToken),
-      body: JSON.stringify({ images }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to update images");
-    }
-    return (await res.json()) as Fountain;
-  } catch (e) {
-    clearTimeout(timeoutId);
-    const isAbort = e instanceof Error && e.name === "AbortError";
-    const isNetwork =
-      e instanceof TypeError ||
-      (e instanceof Error &&
-        (/network request timed out|timeout|failed to fetch|network error/i.test(e.message) || isAbort));
-    if (isNetwork || isAbort) {
-      const hint =
-        base.includes("localhost") || base.includes("127.0.0.1")
-          ? " On a physical device, set EXPO_PUBLIC_API_URL in Frontend/.env to your computer's IP (e.g. http://192.168.1.x:3000) and ensure the backend is running."
-          : " Check that the backend is running and reachable.";
-      throw new Error(`Network request timed out.${hint}`);
-    }
-    throw e;
-  }
+  if (!supabase) throw new Error("Supabase is not configured.");
+
+  const { data, error } = await supabase
+    .from("water_sources")
+    .update({ images: allImages })
+    .eq("id", id)
+    .select("id, name, latitude, longitude, images, rating, is_operational, is_verified")
+    .single();
+
+  if (error) throw new Error(error.message || "Failed to update photos.");
+
+  const row = data as {
+    id: string; name: string; latitude: number; longitude: number;
+    images: string[] | null; rating: number | null; is_operational: boolean; is_verified: boolean | null;
+  };
+  return {
+    id: row.id,
+    name: row.name,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    images: row.images ?? undefined,
+    imageUrl: row.images?.[0],
+    rating: row.rating ?? undefined,
+    isOperational: row.is_operational ?? true,
+    useAdminPin: row.is_verified ?? false,
+  };
 }
 
 /** Update a water source (name). Creator only; pass accessToken. */
