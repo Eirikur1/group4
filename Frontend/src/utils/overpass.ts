@@ -32,34 +32,18 @@ function descriptionFromTags(tags: Record<string, string> | undefined): string |
   return parts.length ? parts.join(" ") : undefined;
 }
 
-/** Fetch drinking water nodes from OpenStreetMap near a point. All returned fountains use the blue AdminPin. */
-export async function fetchWaterFountains(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number = 5000,
-): Promise<Fountain[]> {
-  const query = `[out:json][timeout:15];
-node(around:${Math.round(radiusMeters)},${latitude},${longitude})["amenity"="drinking_water"];
-out body;`;
+/** Shared Overpass response type */
+type OverpassElement = {
+  type: string;
+  id: number;
+  lat?: number;
+  lon?: number;
+  tags?: Record<string, string>;
+};
 
-  const res = await fetch(OVERPASS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: query,
-  });
-
-  if (!res.ok) throw new Error(`Overpass error: ${res.status}`);
-  const json = (await res.json()) as {
-    elements?: Array<{
-      type: string;
-      id: number;
-      lat: number;
-      lon: number;
-      tags?: Record<string, string>;
-    }>;
-  };
-
-  const elements = json.elements ?? [];
+function parseOverpassElements(
+  elements: OverpassElement[],
+): Fountain[] {
   return elements
     .filter((el) => el.lat != null && el.lon != null)
     .map((el) => {
@@ -70,8 +54,8 @@ out body;`;
       return {
         id: el.id,
         name: tags.name ?? "Water fountain",
-        latitude: el.lat,
-        longitude: el.lon,
+        latitude: el.lat!,
+        longitude: el.lon!,
         description: description || undefined,
         imageUrl: imageUrl || undefined,
         images: imageUrl ? [imageUrl] : undefined,
@@ -81,4 +65,50 @@ out body;`;
         useAdminPin: true,
       };
     }) as Fountain[];
+}
+
+async function runOverpassQuery(query: string): Promise<OverpassElement[]> {
+  const res = await fetch(OVERPASS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: query,
+  });
+  if (!res.ok) throw new Error(`Overpass error: ${res.status}`);
+  const json = (await res.json()) as { elements?: OverpassElement[] };
+  return json.elements ?? [];
+}
+
+const MAX_OVERPASS_ELEMENTS = 2000;
+
+/**
+ * Fetch drinking water nodes from OpenStreetMap near a point.
+ * Uses Overpass tag: amenity=drinking_water. Limited to MAX_OVERPASS_ELEMENTS to avoid lag.
+ */
+export async function fetchWaterFountains(
+  latitude: number,
+  longitude: number,
+  radiusMeters: number = 100000,
+): Promise<Fountain[]> {
+  const query = `[out:json][timeout:25];
+node(around:${Math.round(radiusMeters)},${latitude},${longitude})["amenity"="drinking_water"];
+out body ${MAX_OVERPASS_ELEMENTS};`;
+  const elements = await runOverpassQuery(query);
+  return parseOverpassElements(elements);
+}
+
+/**
+ * Fetch drinking water nodes in a bounding box (south, west, north, east).
+ * Limited to MAX_OVERPASS_ELEMENTS to keep response size and render cost down.
+ */
+export async function fetchWaterFountainsInBbox(
+  south: number,
+  west: number,
+  north: number,
+  east: number,
+): Promise<Fountain[]> {
+  const query = `[out:json][timeout:25];
+node["amenity"="drinking_water"](${south},${west},${north},${east});
+out body ${MAX_OVERPASS_ELEMENTS};`;
+  const elements = await runOverpassQuery(query);
+  return parseOverpassElements(elements);
 }

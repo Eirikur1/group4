@@ -1,4 +1,5 @@
 import type { Fountain } from "../types/fountain";
+import { supabase } from "./supabase";
 
 const getBaseUrl = () => process.env.EXPO_PUBLIC_API_URL ?? "";
 
@@ -8,15 +9,76 @@ function authHeaders(accessToken: string | undefined): Record<string, string> {
   return h;
 }
 
-/** Fetch all user-uploaded water sources from the backend. Returns Fountain[] with useAdminPin: false (use PinIcon). */
-export async function fetchUserWaterSources(): Promise<Fountain[]> {
-  const base = getBaseUrl();
-  if (!base) return [];
+/**
+ * Fetch verified (blue-pin) fountains directly from Supabase.
+ * These are seeded from OSM and stored with is_verified = true.
+ */
+export async function fetchVerifiedFountains(): Promise<Fountain[]> {
+  if (!supabase) return [];
   try {
-    const res = await fetch(`${base}/api/water-sources`);
-    if (!res.ok) return [];
-    const data = (await res.json()) as Fountain[];
-    return Array.isArray(data) ? data : [];
+    const { data, error } = await supabase
+      .from("water_sources")
+      .select("id, name, latitude, longitude, images, rating, is_operational")
+      .eq("is_verified", true);
+    if (error || !data) return [];
+    return (data as Array<{
+      id: string;
+      name: string;
+      latitude: number;
+      longitude: number;
+      images: string[] | null;
+      rating: number | null;
+      is_operational: boolean;
+    }>).map((row) => ({
+      id: row.id,
+      name: row.name,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      images: row.images ?? undefined,
+      imageUrl: row.images?.[0],
+      rating: row.rating ?? undefined,
+      isOperational: row.is_operational ?? true,
+      useAdminPin: true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch user-uploaded (orange-pin) fountains directly from Supabase.
+ * Filters to is_verified = false so there is zero overlap with fetchVerifiedFountains.
+ */
+export async function fetchUserWaterSources(): Promise<Fountain[]> {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("water_sources")
+      .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+      .eq("is_verified", false)
+      .order("created_at", { ascending: false });
+    if (error || !data) return [];
+    return (data as Array<{
+      id: string;
+      name: string;
+      latitude: number;
+      longitude: number;
+      images: string[] | null;
+      rating: number | null;
+      is_operational: boolean;
+      created_by: string | null;
+    }>).map((row) => ({
+      id: row.id,
+      name: row.name,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      images: row.images ?? undefined,
+      imageUrl: row.images?.[0],
+      rating: row.rating ?? undefined,
+      isOperational: row.is_operational ?? true,
+      useAdminPin: false,
+      createdBy: row.created_by ? { id: row.created_by } : undefined,
+    }));
   } catch {
     return [];
   }
@@ -86,6 +148,47 @@ export async function insertWaterSource(
           : " Check that the backend is running and reachable.";
       throw new Error(`Network request timed out.${hint}`);
     }
+    throw e;
+  }
+}
+
+/**
+ * Get or create a backend water source for an OSM node so users can add photos and rate.
+ * Returns the Fountain-shaped row (id is string uuid). Requires sign-in.
+ */
+export async function getOrCreateWaterSourceForOsm(
+  osmNodeId: number,
+  name: string,
+  latitude: number,
+  longitude: number,
+  accessToken: string | undefined
+): Promise<Fountain | null> {
+  const base = getBaseUrl();
+  if (!base) throw new Error("Backend URL not set.");
+  if (!accessToken) throw new Error("Sign in to add photos or rate this location.");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/api/water-sources/by-osm`, {
+      method: "POST",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({
+        osm_node_id: osmNodeId,
+        name: name.trim() || "Water fountain",
+        latitude,
+        longitude,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error ?? "Failed to load location");
+    }
+    const data = (await res.json()) as Fountain;
+    return data ?? null;
+  } catch (e) {
+    clearTimeout(timeoutId);
     throw e;
   }
 }

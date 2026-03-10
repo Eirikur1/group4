@@ -3,8 +3,9 @@ import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
-import StarFullIcon from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
+import StarIcon from "../../assets/icons/Star.svg";
 import { darkMapStyle } from "../constants/mapStyles";
+import { GRID_MARGIN } from "../constants/grid";
 
 const region = (f: Fountain) => ({
   latitude: f.latitude,
@@ -49,7 +50,11 @@ function FeaturedFountainCard({
               latitude: fountain.latitude,
               longitude: fountain.longitude,
             }}
-            image={require("../../assets/icons/PinIcon.png")}
+            image={
+              fountain.useAdminPin
+                ? require("../../assets/icons/AdminPin.png")
+                : require("../../assets/icons/PinIcon.png")
+            }
             anchor={{ x: 0.5, y: 1 }}
           />
         </MapView>
@@ -64,7 +69,7 @@ function FeaturedFountainCard({
         {fountain.rating != null && (
           <View style={styles.rating}>
             <Text style={styles.ratingValue}>{fountain.rating}</Text>
-            <StarFullIcon width={16} height={16} fill="#FFD700" color="#FFD700" />
+            <StarIcon width={16} height={16} fill="#F9E000" color="#F9E000" />
           </View>
         )}
       </View>
@@ -95,7 +100,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   map: { width: "100%", height: "100%" },
-  body: { padding: 16 },
+  body: { padding: GRID_MARGIN },
   title: {
     fontSize: 18,
     fontWeight: "700",

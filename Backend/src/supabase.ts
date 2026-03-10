@@ -16,8 +16,10 @@ export interface WaterSourceRow {
   images: string[] | null;
   rating: number | null;
   is_operational: boolean;
+  is_verified?: boolean | null;
   created_at?: string;
   created_by?: string | null;
+  osm_node_id?: number | null;
 }
 
 export interface ProfileRow {
@@ -33,7 +35,7 @@ export interface CreatedByInfo {
   avatarUrl?: string;
 }
 
-/** Shape returned to frontend (Fountain with useAdminPin: false) */
+/** Shape returned to frontend */
 export interface WaterSourceResponse {
   id: string;
   name: string;
@@ -43,7 +45,7 @@ export interface WaterSourceResponse {
   imageUrl?: string;
   rating?: number;
   isOperational: boolean;
-  useAdminPin: false;
+  useAdminPin: boolean;
   createdBy?: CreatedByInfo;
 }
 
@@ -60,7 +62,7 @@ function toResponse(
     imageUrl: row.images?.[0],
     rating: row.rating ?? undefined,
     isOperational: row.is_operational ?? true,
-    useAdminPin: false,
+    useAdminPin: row.is_verified ?? false,
   };
   if (row.created_by) {
     res.createdBy = {
@@ -93,12 +95,61 @@ async function getAverageRatings(): Promise<Map<string, number>> {
   return result;
 }
 
+/** Get or create a water source for an OSM node. Any signed-in user can add photos/rate. */
+export async function getOrCreateByOsmNodeId(
+  osmNodeId: number,
+  name: string,
+  latitude: number,
+  longitude: number
+): Promise<WaterSourceResponse | null> {
+  if (!supabase) return null;
+  const { data: existing, error: selectError } = await supabase
+    .from(TABLE)
+    .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
+    .eq("osm_node_id", osmNodeId)
+    .maybeSingle();
+  if (!selectError && existing) {
+    const row = existing as WaterSourceRow;
+    let creator: ProfileRow | null = null;
+    if (row.created_by) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .eq("id", row.created_by)
+        .single();
+      creator = profile as ProfileRow | null;
+    }
+    const res = toResponse(row, creator);
+    const averages = await getAverageRatings();
+    const avg = averages.get(row.id);
+    if (avg != null) res.rating = avg;
+    return res;
+  }
+  const { data: inserted, error: insertError } = await supabase
+    .from(TABLE)
+    .insert({
+      name: (name ?? "").trim() || "Water fountain",
+      latitude,
+      longitude,
+      images: [],
+      rating: null,
+      is_operational: true,
+      created_by: null,
+      osm_node_id: osmNodeId,
+    })
+    .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
+    .single();
+  if (insertError) throw insertError;
+  const row = inserted as WaterSourceRow;
+  return toResponse(row, null);
+}
+
 export async function getWaterSources(): Promise<WaterSourceResponse[]> {
   if (!supabase) return [];
   const [sourcesResult, averages] = await Promise.all([
     supabase
       .from(TABLE)
-      .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+      .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
       .order("created_at", { ascending: false }),
     getAverageRatings(),
   ]);
@@ -178,7 +229,7 @@ export async function insertWaterSource(
       is_operational: true,
       created_by: createdBy ?? null,
     })
-    .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+    .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
     .single();
   if (error) throw error;
   const row = data as WaterSourceRow;
@@ -234,7 +285,7 @@ export async function updateWaterSource(
   if (Object.keys(updates).length === 0) {
     const { data } = await supabase
       .from(TABLE)
-      .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+      .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
       .eq("id", id)
       .single();
     const row = data as WaterSourceRow | null;
@@ -252,7 +303,7 @@ export async function updateWaterSource(
     .from(TABLE)
     .update(updates)
     .eq("id", id)
-    .select("id, name, latitude, longitude, images, rating, is_operational, created_by")
+    .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
     .single();
   if (error) throw error;
   const row = data as WaterSourceRow;

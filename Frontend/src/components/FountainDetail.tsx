@@ -28,6 +28,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import type { Fountain } from "../types/fountain";
 import { darkMapStyle } from "../constants/mapStyles";
+import { GRID_MARGIN, GRID_GUTTER, GRID_GUTTER_HALF } from "../constants/grid";
 import { openDirections } from "../utils/directions";
 import { uploadFountainPhotos } from "../lib/uploadFountainPhoto";
 import {
@@ -35,15 +36,15 @@ import {
   updateWaterSource,
   deleteWaterSource,
 } from "../lib/waterSources";
+import { resolveOsmToUuid } from "../lib/osmResolution";
 import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
-import { submitRating, getAverageRating } from "../lib/ratings";
-import { logRefill } from "../lib/refills";
+import { submitRating } from "../lib/ratings";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import SavedIcon from "./SavedIcon";
 import ImageWithSkeleton from "./ImageWithSkeleton";
 import StarRating from "./StarRating";
-import StarFullIcon from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
+import StarIcon from "../../assets/icons/Star.svg";
 
 const SCREEN_W = Dimensions.get("window").width;
 // Account for mapBlock margins (8), padding (13), and belowMap margins (6)
@@ -111,55 +112,70 @@ export default function FountainDetail({
 }: FountainDetailProps) {
   const navigation = useNavigation<NavProp>();
   const { isSignedIn, user, session } = useAuth();
+  const [resolvedFountain, setResolvedFountain] = useState<Fountain | null>(
+    typeof fountain.id === "string" ? fountain : null,
+  );
+  const isOsm = typeof fountain.id === "number";
+  const effectiveFountain = resolvedFountain ?? fountain;
+
+  useEffect(() => {
+    if (!isOsm || typeof fountain.id !== "number") return;
+    let cancelled = false;
+    resolveOsmToUuid(fountain.id, fountain.name, fountain.latitude, fountain.longitude)
+      .then((id) => {
+        if (cancelled || !id) return;
+        setResolvedFountain({ ...fountain, id });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isOsm, fountain.id, fountain.name, fountain.latitude, fountain.longitude]);
+
   const urls: string[] =
-    (fountain.images?.length ?? 0) > 0
-      ? fountain.images!
-      : fountain.imageUrl
-        ? [fountain.imageUrl]
+    (effectiveFountain.images?.length ?? 0) > 0
+      ? effectiveFountain.images!
+      : effectiveFountain.imageUrl
+        ? [effectiveFountain.imageUrl]
         : [];
 
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [addingPhoto, setAddingPhoto] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState(fountain.name);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [loggingRefill, setLoggingRefill] = useState(false);
-  const [showRefillToast, setShowRefillToast] = useState(false);
   const [showSavedLottie, setShowSavedLottie] = useState(false);
-  const refillLottieRef = useRef<LottieView>(null);
-  const refillToastHideTimeoutRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
   const savedLottieHideTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
   const insets = useSafeAreaInsets();
 
-  // Creator can add photos; if there is no creator (legacy location), any signed-in user can add.
   const isOwner =
-    typeof fountain.id === "string" &&
+    typeof effectiveFountain.id === "string" &&
     !!user &&
-    !!fountain.createdBy &&
-    fountain.createdBy.id === user.id;
-  const hasNoCreator = typeof fountain.id === "string" && !fountain.createdBy;
+    !!effectiveFountain.createdBy &&
+    effectiveFountain.createdBy.id === user.id;
+  const hasNoCreator = typeof effectiveFountain.id === "string" && !effectiveFountain.createdBy;
+  // OSM fountains: any signed-in user can add photos (resolved on demand)
   const canAddPhotos =
-    typeof fountain.id === "string" &&
     !!onPhotosAdded &&
-    (isOwner || (isSignedIn && hasNoCreator));
+    isSignedIn &&
+    (isOwner || hasNoCreator || isOsm);
 
   const totalSlides = urls.length + (canAddPhotos ? 1 : 0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (typeof fountain.id !== "string") {
+      if (typeof effectiveFountain.id !== "string") {
         setSaved(false);
         return;
       }
       try {
-        const value = await isLocationSaved(fountain.id);
+        const value = await isLocationSaved(effectiveFountain.id);
         if (!cancelled) setSaved(value);
       } catch {
         if (!cancelled) setSaved(false);
@@ -168,7 +184,7 @@ export default function FountainDetail({
     return () => {
       cancelled = true;
     };
-  }, [fountain.id]);
+  }, [effectiveFountain.id]);
 
   // The add-photo slide has marginRight = ITEM_W/2, so content ends
   // ITEM_W/2 past its right edge. The final snap positions the last real
@@ -196,22 +212,53 @@ export default function FountainDetail({
     setCarouselIndex(0);
   }
 
+  /** Resolve an OSM fountain to a Supabase UUID on-demand (called when user adds photo, saves, or rates). */
+  const resolveOsmFountainNow = useCallback(async (): Promise<string | null> => {
+    if (typeof effectiveFountain.id === "string") return effectiveFountain.id;
+    if (typeof fountain.id !== "number") return null;
+    setResolving(true);
+    try {
+      const id = await resolveOsmToUuid(
+        fountain.id,
+        fountain.name,
+        fountain.latitude,
+        fountain.longitude,
+      );
+      if (!id) return null;
+      setResolvedFountain({ ...fountain, id });
+      return id;
+    } catch {
+      return null;
+    } finally {
+      setResolving(false);
+    }
+  }, [effectiveFountain.id, fountain]);
+
   const uploadUris = useCallback(
     async (uris: string[]) => {
       if (!uris.length || !onPhotosAdded) return;
+      setAddingPhoto(true);
+      let resolvedId = typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
+      if (!resolvedId) {
+        resolvedId = await resolveOsmFountainNow();
+      }
+      if (!resolvedId) {
+        setAddingPhoto(false);
+        Alert.alert("Upload failed", "Could not connect to backend. Check your connection and try again.");
+        return;
+      }
       const previousImages =
-        fountain.images ?? (fountain.imageUrl ? [fountain.imageUrl] : []);
+        effectiveFountain.images ?? (effectiveFountain.imageUrl ? [effectiveFountain.imageUrl] : []);
       const optimisticImages = [...previousImages, ...uris];
       onPhotosAdded({ ...fountain, images: optimisticImages });
-      setAddingPhoto(true);
       try {
         const newUrls = await uploadFountainPhotos(uris);
         const updated = await addPhotosToWaterSource(
-          String(fountain.id),
+          resolvedId,
           newUrls,
           session?.access_token,
         );
-        if (updated) onPhotosAdded(updated);
+        if (updated) onPhotosAdded({ ...fountain, images: updated.images ?? optimisticImages });
       } catch (e) {
         onPhotosAdded({ ...fountain, images: previousImages });
         Alert.alert(
@@ -222,7 +269,7 @@ export default function FountainDetail({
         setAddingPhoto(false);
       }
     },
-    [fountain, onPhotosAdded],
+    [fountain, effectiveFountain, onPhotosAdded, session?.access_token, resolveOsmFountainNow],
   );
 
   const addFromLibrary = useCallback(async () => {
@@ -279,18 +326,19 @@ export default function FountainDetail({
       );
       return;
     }
-    if (typeof fountain.id !== "string") {
-      Alert.alert(
-        "Not supported",
-        "Only database-backed fountains can be saved right now.",
-      );
+    let fountainId = typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
+    if (!fountainId && isOsm) {
+      fountainId = await resolveOsmFountainNow();
+    }
+    if (!fountainId) {
+      Alert.alert("Not supported", "Could not connect to backend. Try again.");
       return;
     }
     const previous = saved;
     setSaved((prev) => !prev);
     onSavedChanged?.();
     try {
-      await toggleSavedLocation(fountain.id);
+      await toggleSavedLocation(fountainId);
       if (!previous) {
         setShowSavedLottie(true);
         if (savedLottieHideTimeoutRef.current) {
@@ -308,19 +356,27 @@ export default function FountainDetail({
         e instanceof Error ? e.message : "Could not update saved location.",
       );
     }
-  }, [isSignedIn, fountain.id, saved, onSavedChanged, navigation]);
+  }, [isSignedIn, isOsm, effectiveFountain.id, saved, onSavedChanged, navigation, resolveOsmFountainNow]);
 
-  const canRate =
-    isSignedIn && typeof fountain.id === "string" && onRatingChanged != null;
+  const canRate = isSignedIn && onRatingChanged != null;
   const handleRate = useCallback(
     async (rating: number) => {
-      if (!canRate || typeof fountain.id !== "string") return;
-      const previousRating = fountain.rating;
-      onRatingChanged?.({ ...fountain, rating });
+      if (!canRate) return;
+      // Ensure we have a real UUID before hitting the ratings table
+      let resolvedRatingId = typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
+      if (!resolvedRatingId) {
+        resolvedRatingId = await resolveOsmFountainNow();
+      }
+      if (!resolvedRatingId) {
+        Alert.alert("Rating failed", "Could not connect to server. Try again.");
+        return;
+      }
+      const previousRating = effectiveFountain.rating;
+      const submittedRating = Math.round(rating);
+      onRatingChanged?.({ ...fountain, rating: submittedRating });
       try {
-        await submitRating(fountain.id, Math.round(rating));
-        const avg = await getAverageRating(fountain.id);
-        onRatingChanged?.({ ...fountain, rating: avg ?? rating });
+        await submitRating(resolvedRatingId, submittedRating);
+        onRatingChanged?.({ ...fountain, rating: submittedRating });
       } catch (e) {
         onRatingChanged?.({ ...fountain, rating: previousRating });
         Alert.alert(
@@ -329,11 +385,11 @@ export default function FountainDetail({
         );
       }
     },
-    [canRate, fountain, onRatingChanged],
+    [canRate, effectiveFountain, fountain, onRatingChanged, resolveOsmFountainNow],
   );
 
   const handleDelete = useCallback(() => {
-    const id = fountain.id;
+    const id = effectiveFountain.id;
     if (typeof id !== "string") return;
     Alert.alert(
       "Delete location?",
@@ -362,43 +418,12 @@ export default function FountainDetail({
       ],
     );
   }, [
-    fountain.id,
+    effectiveFountain.id,
     fountain.name,
     session?.access_token,
     onFountainDeleted,
     navigation,
   ]);
-
-  const handleRefillHere = useCallback(async () => {
-    if (!user?.id || loggingRefill) return;
-    setLoggingRefill(true);
-    try {
-      const waterSourceId =
-        typeof fountain.id === "string" ? fountain.id : null;
-      await logRefill(user.id, waterSourceId);
-      if (refillToastHideTimeoutRef.current) {
-        clearTimeout(refillToastHideTimeoutRef.current);
-        refillToastHideTimeoutRef.current = null;
-      }
-      setShowRefillToast(true);
-      refillToastHideTimeoutRef.current = setTimeout(() => {
-        refillToastHideTimeoutRef.current = null;
-        setShowRefillToast(false);
-      }, 5000);
-    } catch {
-      Alert.alert("Couldn't log refill", "Please try again.");
-    } finally {
-      setLoggingRefill(false);
-    }
-  }, [user?.id, fountain.id, loggingRefill]);
-
-  const handleRefillLottieFinish = useCallback(() => {
-    if (refillToastHideTimeoutRef.current) {
-      clearTimeout(refillToastHideTimeoutRef.current);
-      refillToastHideTimeoutRef.current = null;
-    }
-    setShowRefillToast(false);
-  }, []);
 
   const handleSavedLottieFinish = useCallback(() => {
     if (savedLottieHideTimeoutRef.current) {
@@ -410,9 +435,6 @@ export default function FountainDetail({
 
   useEffect(() => {
     return () => {
-      if (refillToastHideTimeoutRef.current) {
-        clearTimeout(refillToastHideTimeoutRef.current);
-      }
       if (savedLottieHideTimeoutRef.current) {
         clearTimeout(savedLottieHideTimeoutRef.current);
       }
@@ -421,11 +443,11 @@ export default function FountainDetail({
 
   const handleSaveEdit = useCallback(async () => {
     const name = editName.trim();
-    if (!name || typeof fountain.id !== "string") return;
+    if (!name || typeof effectiveFountain.id !== "string") return;
     setSavingEdit(true);
     try {
       const updated = await updateWaterSource(
-        fountain.id,
+        effectiveFountain.id,
         { name },
         session?.access_token,
       );
@@ -441,7 +463,7 @@ export default function FountainDetail({
     } finally {
       setSavingEdit(false);
     }
-  }, [fountain.id, editName, session?.access_token, onFountainUpdated]);
+  }, [effectiveFountain.id, editName, session?.access_token, onFountainUpdated]);
 
   return (
     <View style={styles.container}>
@@ -481,7 +503,11 @@ export default function FountainDetail({
                 tracksViewChanges={false}
               >
                 <Image
-                  source={require("../../assets/icons/PinIcon.png")}
+                  source={
+                    fountain.useAdminPin
+                      ? require("../../assets/icons/AdminPin.png")
+                      : require("../../assets/icons/PinIcon.png")
+                  }
                   style={styles.mapPin}
                   resizeMode="contain"
                 />
@@ -489,27 +515,6 @@ export default function FountainDetail({
             </MapView>
           </View>
           <View style={styles.mapSaveOverlay} pointerEvents="box-none">
-            {isSignedIn ? (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.mapRefillButton,
-                  pressed && styles.mapRefillButtonPressed,
-                ]}
-                onPress={handleRefillHere}
-                disabled={loggingRefill}
-                accessibilityLabel="I refilled here"
-              >
-                <View style={styles.mapRefillIconCircle}>
-                  {loggingRefill ? (
-                    <ActivityIndicator size="small" color="#3A9BDC" />
-                  ) : (
-                    <Ionicons name="water" size={16} color="#3A9BDC" />
-                  )}
-                </View>
-              </Pressable>
-            ) : (
-              <View style={styles.mapRefillButtonPlaceholder} />
-            )}
             <Pressable
               style={({ pressed }) => [
                 styles.mapSaveButton,
@@ -538,14 +543,14 @@ export default function FountainDetail({
                 {fountain.category ? (
                   <Text style={styles.category}>{fountain.category}</Text>
                 ) : null}
-                {fountain.rating != null && (
+                {effectiveFountain.rating != null && (
                   <View style={styles.rating}>
-                    <Text style={styles.ratingValue}>{fountain.rating}</Text>
-                    <StarFullIcon
+                    <Text style={styles.ratingValue}>{effectiveFountain.rating}</Text>
+                    <StarIcon
                       width={18}
                       height={18}
-                      fill="#FFD700"
-                      color="#FFD700"
+                      fill="#F9E000"
+                      color="#F9E000"
                     />
                   </View>
                 )}
@@ -589,10 +594,10 @@ export default function FountainDetail({
                         { width: ITEM_W, marginRight: Math.round(ITEM_W / 2) },
                       ]}
                       onPress={handleAddPhoto}
-                      disabled={addingPhoto}
+                      disabled={addingPhoto || resolving}
                       accessibilityLabel="Add photo"
                     >
-                      {addingPhoto ? (
+                      {addingPhoto || resolving ? (
                         <ActivityIndicator color="#3A9BDC" />
                       ) : (
                         <>
@@ -692,10 +697,12 @@ export default function FountainDetail({
                 <Text style={styles.ratingQuestion}>
                   How would you rate the water?
                 </Text>
-                <Text style={styles.ratingSubtitle}>We'd love to know!</Text>
+                <Text style={styles.ratingSubtitle}>
+                  {isSignedIn ? "We'd love to know!" : "Sign in to rate"}
+                </Text>
                 <View style={styles.starsRow}>
                   <StarRating
-                    rating={fountain.rating}
+                    rating={effectiveFountain.rating}
                     size={28}
                     onRate={canRate ? handleRate : undefined}
                   />
@@ -703,9 +710,9 @@ export default function FountainDetail({
               </View>
             </View>
 
-            {typeof fountain.id === "string" && (
+            {typeof effectiveFountain.id === "string" && effectiveFountain.createdBy && (
               <Text style={styles.addedByFooter} numberOfLines={1}>
-                Added by {fountain.createdBy?.displayName ?? "Someone"}
+                Added by {effectiveFountain.createdBy.displayName ?? "Someone"}
               </Text>
             )}
           </View>
@@ -759,36 +766,18 @@ export default function FountainDetail({
         </Modal>
       </ScrollView>
 
-      {showRefillToast && (
-        <View
-          style={[styles.refillToastWrap, { paddingTop: insets.top }]}
-          pointerEvents="none"
-        >
-          <View style={styles.refillToast}>
-            <LottieView
-              ref={refillLottieRef}
-              source={require("../../assets/icons/JitterFiles/RefillSavedFinal.json")}
-              autoPlay
-              loop={false}
-              onAnimationFinish={handleRefillLottieFinish}
-              style={styles.refillToastLottie}
-            />
-          </View>
-        </View>
-      )}
-
       {showSavedLottie && (
         <View
-          style={[styles.refillToastWrap, { paddingTop: insets.top }]}
+          style={[styles.savedLottieWrap, { paddingTop: insets.top }]}
           pointerEvents="none"
         >
-          <View style={styles.refillToast}>
+          <View style={styles.savedLottie}>
             <LottieView
               source={require("../../assets/icons/JitterFiles/RefillSavedFinal.json")}
               autoPlay
               loop={false}
               onAnimationFinish={handleSavedLottieFinish}
-              style={styles.refillToastLottie}
+              style={styles.savedLottieLottie}
             />
           </View>
         </View>
@@ -797,15 +786,13 @@ export default function FountainDetail({
   );
 }
 
-const MAP_RADIUS = 16;
+const MAP_RADIUS = GRID_MARGIN;
 
-// Spacing from Figma (132-2403): consistent horizontal padding, generous vertical gaps
-const SPACE_H = 16;
+// Grid: margin 16, gutter 16
 const SPACE_MAP_TO_TITLE = 20;
 const SPACE_TITLE_TO_IMAGES = 20;
 const SPACE_IMAGES_TO_RATING = 24;
 const SPACE_RATING_TO_ACTIONS = 24;
-const SPACE_BETWEEN_SECTIONS = 16;
 const GAP_IMAGES = 12;
 
 const styles = StyleSheet.create({
@@ -817,9 +804,9 @@ const styles = StyleSheet.create({
   },
   mapBlock: {
     marginTop: 0,
-    marginHorizontal: 8,
-    marginBottom: SPACE_BETWEEN_SECTIONS,
-    padding: 13,
+    marginHorizontal: GRID_GUTTER_HALF,
+    marginBottom: GRID_GUTTER,
+    padding: GRID_GUTTER_HALF + 5,
     borderRadius: MAP_RADIUS,
     borderWidth: 2,
     borderColor: "#e0e0e0",
@@ -828,8 +815,8 @@ const styles = StyleSheet.create({
   },
   mapWrap: {
     height: 280,
-    marginHorizontal: 6,
-    marginBottom: 13,
+    marginHorizontal: GRID_GUTTER_HALF - 2,
+    marginBottom: GRID_GUTTER_HALF + 5,
     backgroundColor: "#e8e8e8",
     borderTopLeftRadius: MAP_RADIUS,
     borderTopRightRadius: MAP_RADIUS,
@@ -871,32 +858,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 10,
     elevation: 10,
-  },
-  mapRefillButtonPlaceholder: {
-    width: 32,
-    height: 32,
-  },
-  mapRefillButton: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapRefillButtonPressed: { opacity: 0.7 },
-  mapRefillIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 11,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
   },
   mapSaveButton: {
     width: 36,
@@ -1018,11 +979,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666666",
     marginBottom: 8,
-    paddingHorizontal: SPACE_H,
+    paddingHorizontal: GRID_MARGIN,
   },
   extraSection: {
-    paddingHorizontal: SPACE_H,
-    paddingVertical: SPACE_BETWEEN_SECTIONS,
+    paddingHorizontal: GRID_MARGIN,
+    paddingVertical: GRID_GUTTER,
   },
   extraTitle: {
     fontSize: 16,
@@ -1102,18 +1063,18 @@ const styles = StyleSheet.create({
   modalButtonSave: { backgroundColor: "#3A9BDC" },
   modalButtonCancelText: { fontSize: 15, fontWeight: "600", color: "#333" },
   modalButtonSaveText: { fontSize: 15, fontWeight: "600", color: "#FFF" },
-  refillToastWrap: {
+  savedLottieWrap: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     alignItems: "center",
   },
-  refillToast: {
+  savedLottie: {
     alignItems: "center",
     justifyContent: "center",
   },
-  refillToastLottie: {
+  savedLottieLottie: {
     width: 300,
     height: 300,
   },

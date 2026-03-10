@@ -108,3 +108,14 @@ create policy "Allow public insert"
 ```
 
 Then user-uploaded pins will show on the map and in the list using the water-droplet pin icon.
+
+## OSM-backed locations (photos & ratings)
+
+To let users add photos and rate **OpenStreetMap (verified) fountains**, the backend needs to link OSM nodes to a `water_sources` row. Add this column and run the backend with it:
+
+```sql
+alter table water_sources
+  add column if not exists osm_node_id bigint unique;
+```
+
+After that, when a user opens an OSM fountain and is signed in, the app calls `POST /api/water-sources/by-osm` to get-or-create a row for that OSM node; photos and ratings then use that row like user-uploaded locations.

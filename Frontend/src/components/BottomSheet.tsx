@@ -9,6 +9,7 @@ import {
   Easing,
   Pressable,
 } from "react-native";
+import { GRID_MARGIN } from "../constants/grid";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -181,9 +182,9 @@ const styles = StyleSheet.create({
   },
   sheet: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 16,
+    left: GRID_MARGIN,
+    right: GRID_MARGIN,
+    bottom: GRID_MARGIN,
     backgroundColor: "#fff",
     borderRadius: 24,
     overflow: "hidden",
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
   handleWrap: {
     paddingTop: 10,
     paddingBottom: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: GRID_MARGIN,
     alignItems: "stretch",
     minHeight: 48,
   },
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: GRID_MARGIN,
     paddingBottom: 24,
     minHeight: 0,
   },

@@ -3,6 +3,7 @@ import cors from "cors";
 import { getUserIdFromRequest } from "./auth";
 import {
   getWaterSources,
+  getOrCreateByOsmNodeId,
   insertWaterSource,
   addImagesToWaterSource,
   deleteWaterSource,
@@ -31,6 +32,51 @@ app.get("/api/water-sources", async (req: Request, res: Response) => {
   } catch (e) {
     console.error("GET /api/water-sources", e);
     res.status(500).json({ error: "Failed to fetch water sources" });
+  }
+});
+
+app.post("/api/water-sources/by-osm", async (req: Request, res: Response) => {
+  try {
+    const userId = await getUserIdFromRequest(req);
+    if (!userId) {
+      res.status(401).json({ error: "Sign in to use this location." });
+      return;
+    }
+    const body = req.body as {
+      osm_node_id?: number;
+      name?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+    if (
+      body?.osm_node_id == null ||
+      typeof body.osm_node_id !== "number" ||
+      typeof body.latitude !== "number" ||
+      typeof body.longitude !== "number"
+    ) {
+      res.status(400).json({
+        error: "Missing or invalid osm_node_id, latitude, or longitude",
+      });
+      return;
+    }
+    const row = await getOrCreateByOsmNodeId(
+      body.osm_node_id,
+      typeof body.name === "string" ? body.name : "Water fountain",
+      body.latitude,
+      body.longitude
+    );
+    if (!row) {
+      res.status(500).json({ error: "Failed to get or create water source." });
+      return;
+    }
+    res.status(200).json(row);
+  } catch (e: unknown) {
+    console.error("POST /api/water-sources/by-osm", e);
+    const message =
+      e && typeof e === "object" && "message" in e
+        ? String((e as { message: unknown }).message)
+        : "Failed to get or create location";
+    res.status(500).json({ error: message });
   }
 });
 
