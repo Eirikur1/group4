@@ -253,12 +253,10 @@ export default function FountainDetail({
       onPhotosAdded({ ...fountain, images: optimisticImages });
       try {
         const newUrls = await uploadFountainPhotos(uris);
-        const updated = await addPhotosToWaterSource(
-          resolvedId,
-          newUrls,
-          session?.access_token,
-        );
-        if (updated) onPhotosAdded({ ...fountain, images: updated.images ?? optimisticImages });
+        // Pass the full merged array — addPhotosToWaterSource does a single UPDATE, no extra SELECT
+        const allImages = [...previousImages, ...newUrls];
+        const updated = await addPhotosToWaterSource(resolvedId, allImages, session?.access_token);
+        if (updated) onPhotosAdded({ ...fountain, images: updated.images ?? allImages });
       } catch (e) {
         onPhotosAdded({ ...fountain, images: previousImages });
         Alert.alert(

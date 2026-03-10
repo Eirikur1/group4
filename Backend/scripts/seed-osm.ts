@@ -45,6 +45,30 @@ if ([south, west, north, east].some(isNaN)) {
   process.exit(1);
 }
 
+function osmName(tags?: Record<string, string>): string {
+  if (!tags) return "Drinking water";
+  // Prefer explicit names in any language
+  const name =
+    tags.name ||
+    tags["name:en"] ||
+    tags["name:es"] ||
+    tags["name:is"] ||
+    tags["name:de"] ||
+    tags["name:fr"];
+  if (name) return name;
+  // Fall back to description or note
+  if (tags.description) return tags.description.slice(0, 60);
+  if (tags.note) return tags.note.slice(0, 60);
+  // Construct from address if available
+  if (tags["addr:street"]) {
+    const num = tags["addr:housenumber"] ? ` ${tags["addr:housenumber"]}` : "";
+    return `Drinking water – ${tags["addr:street"]}${num}`;
+  }
+  // Use operator (e.g. "Ayuntamiento de Las Palmas")
+  if (tags.operator) return `Drinking water (${tags.operator})`;
+  return "Drinking water";
+}
+
 interface OsmElement {
   id: number;
   lat: number;
@@ -88,11 +112,7 @@ async function run() {
   for (let i = 0; i < elements.length; i += BATCH) {
     const chunk = elements.slice(i, i + BATCH);
     const rows = chunk.map((el) => ({
-      name:
-        el.tags?.name ??
-        el.tags?.["name:en"] ??
-        el.tags?.["name:is"] ??
-        "Water fountain",
+      name: osmName(el.tags),
       latitude: el.lat,
       longitude: el.lon,
       images: [] as string[],
