@@ -1,8 +1,9 @@
 import React from "react";
 import { View, Pressable, StyleSheet } from "react-native";
+import Star from "../../assets/icons/Star.svg";
 import StarFull from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
 
-const GOLD = "#FFD700";
+const GOLD = "#F9E000";
 const GRAY = "#D1D5DB";
 const STAR_SIZE = 24;
 
@@ -15,8 +16,8 @@ export interface StarRatingProps {
 }
 
 /**
- * Renders star_24dp (full stars only). When rating is null/undefined and not interactive, renders nothing.
- * When onRate is provided, shows 5 tappable stars (gold when filled, gray when not).
+ * Renders Star.svg for selected/filled stars, outline for unselected.
+ * When onRate is provided, shows 5 tappable stars (Star.svg when filled, gray when not).
  */
 export default function StarRating({
   rating,
@@ -34,7 +35,8 @@ export default function StarRating({
   const stars = Array.from({ length: 5 }, (_, i) => {
     const filled = filledCount >= i + 1;
     const color = filled ? GOLD : GRAY;
-    const node = <StarFull width={size} height={size} fill={color} color={color} />;
+    const StarIcon = filled ? Star : StarFull;
+    const node = <StarIcon width={size} height={size} fill={color} color={color} />;
     if (interactive) {
       return (
         <Pressable

@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
+import { GRID_MARGIN, GRID_GUTTER, GRID_GUTTER_HALF } from "../constants/grid";
 import { BackHeader, FormInput, SocialButtons } from "../components";
 import { signInWithOAuthProvider } from "../lib/authOAuth";
 import { supabase } from "../lib/supabase";
@@ -140,14 +141,14 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   scroll: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: GRID_MARGIN + 4, paddingBottom: 40 },
   button: {
     backgroundColor: "#2196F3",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 8,
-    marginBottom: 20,
+    marginTop: GRID_GUTTER_HALF,
+    marginBottom: GRID_MARGIN + 4,
   },
   buttonPressed: { opacity: 0.9 },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
@@ -155,18 +156,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: GRID_MARGIN + 8,
   },
   footerText: { fontSize: 14, color: "#666" },
   link: { fontSize: 14, color: "#2196F3", fontWeight: "600" },
-  divider: { flexDirection: "row", alignItems: "center", marginVertical: 16 },
+  divider: { flexDirection: "row", alignItems: "center", marginVertical: GRID_GUTTER },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#ddd" },
-  dividerText: { marginHorizontal: 12, fontSize: 14, color: "#999" },
+  dividerText: { marginHorizontal: GRID_GUTTER_HALF + 4, fontSize: 14, color: "#999" },
   errorBox: {
     backgroundColor: "#ffebee",
-    padding: 12,
+    padding: GRID_GUTTER_HALF + 4,
     borderRadius: 8,
-    marginBottom: 16,
+    marginBottom: GRID_GUTTER,
   },
   errorText: { color: "#c62828", fontSize: 14 },
   buttonDisabled: { opacity: 0.7 },

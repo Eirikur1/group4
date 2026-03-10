@@ -6,6 +6,7 @@ import type { RootStackParamList } from "../navigation/types";
 import * as ImagePicker from "expo-image-picker";
 import MenuItem from "./MenuItem";
 import { Ionicons } from "@expo/vector-icons";
+import { GRID_MARGIN, GRID_GUTTER_HALF } from "../constants/grid";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { getMyProfile, uploadAvatar } from "../lib/profile";
@@ -150,12 +151,6 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
               onClick={handleLogRefill}
             />
             <MenuItem
-              icon={<Ionicons name="bookmark" size={20} color="#333" />}
-              title="Favorites"
-              subtitle="Favorite Refill stations"
-              onClick={() => {}}
-            />
-            <MenuItem
               icon={<HeartLogo width={20} height={20 * (23 / 25)} color="#333" />}
               title="Saved"
               subtitle="Find Saved Locations"
@@ -187,7 +182,7 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingVertical: 16,
+    paddingVertical: GRID_MARGIN,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
@@ -199,11 +194,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: GRID_GUTTER_HALF + 4,
     overflow: "hidden",
   },
   userInfo: { flex: 1 },
   userName: { fontSize: 18, fontWeight: "600", color: "#000" },
   stats: { fontSize: 14, color: "#666", marginTop: 2 },
-  menu: { paddingTop: 8 },
+  menu: { paddingTop: GRID_GUTTER_HALF },
 });

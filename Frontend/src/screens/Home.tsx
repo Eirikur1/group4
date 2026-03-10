@@ -13,6 +13,7 @@ import {
   Keyboard,
   Alert,
 } from "react-native";
+import RefillWaterJugIcon from "../../assets/icons/RefillWaterJug.svg";
 import LottieView from "lottie-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -28,12 +29,10 @@ import {
   ProfileMenu,
   AddWaterSource,
 } from "../components";
-import RefillWaterJugIcon from "../../assets/icons/RefillWaterJug.svg";
+import { GRID_MARGIN, GRID_GUTTER, GRID_GUTTER_HALF } from "../constants/grid";
 import { useAuth } from "../contexts/AuthContext";
-import { mockFountains } from "../constants/mockFountains";
 import { distanceMeters, formatDistance } from "../utils/distance";
-import { fetchWaterFountains } from "../utils/overpass";
-import { fetchUserWaterSources } from "../lib/waterSources";
+import { fetchUserWaterSources, fetchVerifiedFountains } from "../lib/waterSources";
 import {
   fetchSavedLocations,
   isLocationSaved,
@@ -53,7 +52,6 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 export default function Home() {
   const navigation = useNavigation<NavProp>();
   const { isSignedIn, user } = useAuth();
-  const [fountains, setFountains] = useState<Fountain[]>(mockFountains);
   const [userFountains, setUserFountains] = useState<Fountain[]>([]);
   const [savedFountains, setSavedFountains] = useState<Fountain[]>([]);
   const [userLocation, setUserLocation] = useState<{
@@ -79,8 +77,9 @@ export default function Home() {
     longitude: number;
   } | null>(null);
   const [selectedFountainSaved, setSelectedFountainSaved] = useState(false);
-  const [showRefillSavedToast, setShowRefillSavedToast] = useState(false);
-  const refillSavedToastTimeoutRef = useRef<ReturnType<
+  const [showOnePlusLottie, setShowOnePlusLottie] = useState(false);
+  const [loggingRefill, setLoggingRefill] = useState(false);
+  const onePlusLottieTimeoutRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
   const markerPressTimeRef = useRef(0);
@@ -112,51 +111,34 @@ export default function Home() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!userLocation) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const apiFountains = await fetchWaterFountains(
-          userLocation.latitude,
-          userLocation.longitude,
-          5000,
-        );
-        if (!cancelled) {
-          setFountains((prev) => {
-            const byId: Record<string | number, Fountain> = {};
-            prev.forEach((f) => (byId[f.id] = f));
-            apiFountains.forEach((f) => (byId[f.id] = f));
-            return Object.values(byId);
-          });
-        }
-      } catch {
-        // keep existing fountains on Overpass error
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userLocation?.latitude, userLocation?.longitude]);
 
   useEffect(() => {
     return () => {
-      if (refillSavedToastTimeoutRef.current) {
-        clearTimeout(refillSavedToastTimeoutRef.current);
+      if (onePlusLottieTimeoutRef.current) {
+        clearTimeout(onePlusLottieTimeoutRef.current);
+      }
+      if (regionChangeTimeoutRef.current) {
+        clearTimeout(regionChangeTimeoutRef.current);
       }
     };
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const list = await fetchUserWaterSources();
-      setUserFountains(list);
-    })();
+    Promise.allSettled([fetchUserWaterSources(), fetchVerifiedFountains()]).then(
+      ([userResult, verifiedResult]) => {
+        const userList = userResult.status === "fulfilled" ? userResult.value : [];
+        const verifiedList = verifiedResult.status === "fulfilled" ? verifiedResult.value : [];
+        setUserFountains([...userList, ...verifiedList]);
+      }
+    );
   }, []);
 
   const refetchUserFountains = useCallback(async () => {
-    const list = await fetchUserWaterSources();
-    setUserFountains(list);
+    const [userList, verifiedList] = await Promise.all([
+      fetchUserWaterSources(),
+      fetchVerifiedFountains(),
+    ]);
+    setUserFountains([...userList, ...verifiedList]);
   }, []);
 
   const refetchSavedFountains = useCallback(async () => {
@@ -272,21 +254,16 @@ export default function Home() {
     setShowLeafSavedPopup(false);
   }, []);
 
-  const handleRefillSavedFinish = useCallback(() => {
-    if (refillSavedToastTimeoutRef.current) {
-      clearTimeout(refillSavedToastTimeoutRef.current);
-      refillSavedToastTimeoutRef.current = null;
+  const handleOnePlusLottieFinish = useCallback(() => {
+    if (onePlusLottieTimeoutRef.current) {
+      clearTimeout(onePlusLottieTimeoutRef.current);
+      onePlusLottieTimeoutRef.current = null;
     }
-    setShowRefillSavedToast(false);
+    setShowOnePlusLottie(false);
   }, []);
 
-  const allFountains = useMemo(
-    () => [...fountains, ...userFountains],
-    [fountains, userFountains],
-  );
-
   const closestFountains = useMemo(() => {
-    const list = allFountains.map((f) => ({ ...f }));
+    const list = userFountains.map((f) => ({ ...f }));
     if (!userLocation) return list;
     list.forEach((f) => {
       const m = distanceMeters(
@@ -303,7 +280,7 @@ export default function Home() {
       return ma - mb;
     });
     return list;
-  }, [allFountains, userLocation]);
+  }, [userFountains, userLocation]);
 
   const searchDropdownFountains = useMemo(() => {
     const q = debouncedSearchQuery.trim().toLowerCase();
@@ -372,6 +349,8 @@ export default function Home() {
     [],
   );
 
+  const regionChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleAddLocationPress = useCallback(() => {
     if (!isSignedIn) {
       Alert.alert(
@@ -408,26 +387,29 @@ export default function Home() {
     if (!closestWithId) {
       Alert.alert(
         "No refill station nearby",
-        "Open a fountain from the list and tap \"I refilled here\" to log a refill.",
+        "Add or open a fountain from the list to log a refill there.",
       );
       return;
     }
+    setLoggingRefill(true);
     try {
-      const ok = await logRefill(user.id, closestWithId.id);
+      const ok = await logRefill(user.id, closestWithId.id as string);
       if (ok) {
-        setShowRefillSavedToast(true);
-        if (refillSavedToastTimeoutRef.current) {
-          clearTimeout(refillSavedToastTimeoutRef.current);
+        setShowOnePlusLottie(true);
+        if (onePlusLottieTimeoutRef.current) {
+          clearTimeout(onePlusLottieTimeoutRef.current);
         }
-        refillSavedToastTimeoutRef.current = setTimeout(() => {
-          refillSavedToastTimeoutRef.current = null;
-          setShowRefillSavedToast(false);
+        onePlusLottieTimeoutRef.current = setTimeout(() => {
+          onePlusLottieTimeoutRef.current = null;
+          setShowOnePlusLottie(false);
         }, 5000);
       } else {
         Alert.alert("Couldn't log refill", "Please try again.");
       }
     } catch {
       Alert.alert("Couldn't log refill", "Please try again.");
+    } finally {
+      setLoggingRefill(false);
     }
   }, [isSignedIn, user?.id, closestFountains, navigation]);
 
@@ -462,8 +444,7 @@ export default function Home() {
     <View style={styles.container}>
       {locationReady && (
       <Map
-        key={`map-${allFountains.length}`}
-        fountains={allFountains}
+        fountains={userFountains}
         region={
           userLocation
             ? {
@@ -483,16 +464,28 @@ export default function Home() {
       )}
 
       <View style={styles.addRefillWrap} pointerEvents="box-none">
+        {showOnePlusLottie && (
+          <View style={styles.onePlusLottieWrap}>
+            <LottieView
+              source={require("../../assets/icons/JitterFiles/OnePLus.json")}
+              autoPlay
+              loop={false}
+              onAnimationFinish={handleOnePlusLottieFinish}
+              style={styles.onePlusLottie}
+            />
+          </View>
+        )}
         <Pressable
           style={({ pressed }) => [
             styles.addRefillButton,
             pressed && styles.addRefillButtonPressed,
           ]}
           onPress={handleAddRefillPress}
-          accessibilityLabel="Add water refill"
+          disabled={loggingRefill}
+          accessibilityLabel="Log refill"
           accessibilityRole="button"
         >
-          <RefillWaterJugIcon width={56} height={56} />
+          <RefillWaterJugIcon width={40} height={40} />
         </Pressable>
       </View>
 
@@ -616,7 +609,7 @@ export default function Home() {
                   onClick={() => handleFountainClick(closestFountains[0])}
                 />
               )}
-              {closestFountains.slice(1).map((fountain) => (
+              {closestFountains.slice(1, 20).map((fountain) => (
                 <FountainCard
                   key={fountain.id}
                   fountain={fountain}
@@ -650,12 +643,12 @@ export default function Home() {
               );
             }}
             onFountainDeleted={() => {
-              if (selectedFountain && typeof selectedFountain.id === "string") {
+              if (selectedFountain) {
                 setUserFountains((prev) =>
                   prev.filter((f) => f.id !== selectedFountain.id)
                 );
                 setSelectedFountain(null);
-                setSheetContent(null);
+                setSheetContent("list");
               }
             }}
             onSavedChanged={refetchSavedFountains}
@@ -721,17 +714,6 @@ export default function Home() {
         </View>
       )}
 
-      {showRefillSavedToast && (
-        <View style={styles.leafSavedWrap} pointerEvents="none">
-          <LottieView
-            source={require("../../assets/icons/JitterFiles/RefillSavedFinal.json")}
-            autoPlay
-            loop={false}
-            onAnimationFinish={handleRefillSavedFinish}
-            style={styles.leafSavedLottie}
-          />
-        </View>
-      )}
     </View>
   );
 }
@@ -743,20 +725,32 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 150,
-    alignItems: "flex-end",
-    paddingRight: 24,
+    alignItems: "flex-start",
+    paddingLeft: GRID_MARGIN,
     zIndex: 1,
   },
-  addRefillButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+  onePlusLottieWrap: {
+    marginBottom: 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
+  },
+  onePlusLottie: {
+    width: 48,
+    height: 48,
+  },
+  addRefillButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.9)",
+    opacity: 0.85,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
   },
   addRefillButtonPressed: {
-    opacity: 0.85,
+    opacity: 0.95,
   },
   leafSavedWrap: {
     position: "absolute",
@@ -776,9 +770,9 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     alignItems: "flex-start",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    gap: 8,
+    paddingHorizontal: GRID_MARGIN,
+    paddingTop: GRID_GUTTER_HALF,
+    gap: GRID_GUTTER_HALF,
     zIndex: 10,
   },
   sheetLayer: {
@@ -788,10 +782,10 @@ const styles = StyleSheet.create({
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: GRID_GUTTER,
     backgroundColor: "#FFFFFF",
     borderRadius: 50,
-    paddingHorizontal: 16,
+    paddingHorizontal: GRID_MARGIN,
     height: 40,
     minHeight: 40,
     alignSelf: "stretch",
@@ -829,8 +823,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: GRID_MARGIN,
+    paddingVertical: GRID_GUTTER_HALF + 4,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
@@ -840,7 +834,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#000000",
-    marginRight: 8,
+    marginRight: GRID_GUTTER_HALF,
   },
   searchDropdownDistance: {
     fontSize: 14,
@@ -849,7 +843,7 @@ const styles = StyleSheet.create({
   rightButtons: {
     flexDirection: "column",
     alignItems: "center",
-    gap: 8,
+    gap: GRID_GUTTER_HALF,
   },
   userButton: {
     width: 40,
@@ -888,7 +882,7 @@ const styles = StyleSheet.create({
   listItems: { flex: 1 },
   emptyState: {
     paddingTop: 24,
-    paddingHorizontal: 16,
+    paddingHorizontal: GRID_MARGIN,
     alignItems: "center",
   },
   emptyTitle: {

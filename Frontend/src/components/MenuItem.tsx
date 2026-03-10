@@ -1,6 +1,7 @@
 import React, { type ReactNode } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { GRID_GUTTER_HALF } from "../constants/grid";
 
 interface MenuItemProps {
   icon: ReactNode;
@@ -37,7 +38,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
+    paddingVertical: GRID_GUTTER_HALF + 6,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
@@ -51,7 +52,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: GRID_GUTTER_HALF + 4,
   },
   textWrap: { flex: 1 },
   title: { fontSize: 16, fontWeight: "500", color: "#000" },

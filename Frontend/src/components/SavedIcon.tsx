@@ -9,8 +9,11 @@ interface SavedIconProps {
   filled?: boolean;
 }
 
+/** Red when saved (filled), otherwise uses provided color or default. */
+const SAVED_HEART_COLOR = "#E53935";
+
 /**
- * Saved icon: HeartLogo (outline) when unsaved, HeartLogoOn (filled) when saved.
+ * Saved icon: HeartLogo (outline) when unsaved, HeartLogoOn (filled, red) when saved.
  */
 export default function SavedIcon({
   size = 24,
@@ -18,5 +21,6 @@ export default function SavedIcon({
   filled = false,
 }: SavedIconProps) {
   const Icon = filled ? HeartLogoOn : HeartLogo;
-  return <Icon width={size} height={size * (23 / 25)} color={color} />;
+  const fillColor = filled ? SAVED_HEART_COLOR : color;
+  return <Icon width={size} height={size * (23 / 25)} color={fillColor} />;
 }

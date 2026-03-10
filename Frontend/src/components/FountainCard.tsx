@@ -10,7 +10,8 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
-import StarFullIcon from "../../assets/icons/star_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg";
+import { GRID_GUTTER_HALF } from "../constants/grid";
+import StarIcon from "../../assets/icons/Star.svg";
 import { darkMapStyle } from "../constants/mapStyles";
 
 const thumbRegion = (f: Fountain) => ({
@@ -57,7 +58,11 @@ function FountainCard({ fountain, onClick }: FountainCardProps) {
             tracksViewChanges={false}
           >
             <Image
-              source={require("../../assets/icons/PinIcon.png")}
+              source={
+                fountain.useAdminPin
+                  ? require("../../assets/icons/AdminPin.png")
+                  : require("../../assets/icons/PinIcon.png")
+              }
               style={styles.thumbPin}
               resizeMode="contain"
             />
@@ -75,7 +80,7 @@ function FountainCard({ fountain, onClick }: FountainCardProps) {
       {fountain.rating != null && (
         <View style={styles.rating}>
           <Text style={styles.ratingValue}>{fountain.rating}</Text>
-          <StarFullIcon width={16} height={16} fill="#FFD700" color="#FFD700" />
+          <StarIcon width={16} height={16} fill="#F9E000" color="#F9E000" />
         </View>
       )}
       <Ionicons name="chevron-forward" size={20} color="#999" />
@@ -89,8 +94,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
+    padding: GRID_GUTTER_HALF + 4,
+    marginBottom: GRID_GUTTER_HALF + 2,
     borderWidth: 1,
     borderColor: "#eee",
   },
@@ -100,7 +105,7 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 10,
     overflow: "hidden",
-    marginRight: 12,
+    marginRight: GRID_GUTTER_HALF + 4,
   },
   thumbMap: { width: "100%", height: "100%" },
   thumbPin: { width: 18, height: 18 },
