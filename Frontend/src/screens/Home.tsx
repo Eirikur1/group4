@@ -32,7 +32,11 @@ import {
 import { GRID_MARGIN, GRID_GUTTER, GRID_GUTTER_HALF } from "../constants/grid";
 import { useAuth } from "../contexts/AuthContext";
 import { distanceMeters, formatDistance } from "../utils/distance";
-import { fetchUserWaterSources, fetchVerifiedFountains } from "../lib/waterSources";
+import {
+  fetchFountainsInBoundsCached,
+  invalidateFountainCache,
+  type MapBounds,
+} from "../lib/waterSources";
 import {
   fetchSavedLocations,
   isLocationSaved,
@@ -112,34 +116,57 @@ export default function Home() {
   }, []);
 
 
+  const regionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     return () => {
       if (onePlusLottieTimeoutRef.current) {
         clearTimeout(onePlusLottieTimeoutRef.current);
       }
-      if (regionChangeTimeoutRef.current) {
-        clearTimeout(regionChangeTimeoutRef.current);
+      if (regionDebounceRef.current) {
+        clearTimeout(regionDebounceRef.current);
       }
     };
   }, []);
 
-  useEffect(() => {
-    Promise.allSettled([fetchUserWaterSources(), fetchVerifiedFountains()]).then(
-      ([userResult, verifiedResult]) => {
-        const userList = userResult.status === "fulfilled" ? userResult.value : [];
-        const verifiedList = verifiedResult.status === "fulfilled" ? verifiedResult.value : [];
-        setUserFountains([...userList, ...verifiedList]);
-      }
-    );
+  const fetchForBounds = useCallback(async (bounds: MapBounds) => {
+    try {
+      const list = await fetchFountainsInBoundsCached(bounds);
+      setUserFountains(list);
+    } catch {
+      // keep existing markers on error
+    }
   }, []);
 
+  const handleMapRegionChange = useCallback(
+    (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => {
+      const bounds: MapBounds = {
+        north: region.latitude + region.latitudeDelta / 2,
+        south: region.latitude - region.latitudeDelta / 2,
+        east: region.longitude + region.longitudeDelta / 2,
+        west: region.longitude - region.longitudeDelta / 2,
+      };
+      if (regionDebounceRef.current) clearTimeout(regionDebounceRef.current);
+      regionDebounceRef.current = setTimeout(() => {
+        regionDebounceRef.current = null;
+        fetchForBounds(bounds);
+      }, 400);
+    },
+    [fetchForBounds],
+  );
+
   const refetchUserFountains = useCallback(async () => {
-    const [userList, verifiedList] = await Promise.all([
-      fetchUserWaterSources(),
-      fetchVerifiedFountains(),
-    ]);
-    setUserFountains([...userList, ...verifiedList]);
-  }, []);
+    invalidateFountainCache();
+    if (userLocation) {
+      const bounds: MapBounds = {
+        north: userLocation.latitude + 0.02,
+        south: userLocation.latitude - 0.02,
+        east: userLocation.longitude + 0.02,
+        west: userLocation.longitude - 0.02,
+      };
+      await fetchForBounds(bounds);
+    }
+  }, [userLocation, fetchForBounds]);
 
   const refetchSavedFountains = useCallback(async () => {
     try {
@@ -229,23 +256,14 @@ export default function Home() {
               ),
             }
           : newFountain;
-      // Add the new fountain to the list immediately so the pin appears right away
       setUserFountains((prev) => [withDistance, ...prev]);
       setPendingAddCoordinate(null);
       setSelectedFountain(withDistance);
       setSheetContent("detail");
       setCurrentSnap(1);
       setShowLeafSavedPopup(true);
-      // Refetch after a short delay so the server has the new row; merge result so we never drop the new pin
-      setTimeout(() => {
-        fetchUserWaterSources().then((list) => {
-          setUserFountains((prev) => {
-            const serverIds = new Set(list.map((f) => f.id));
-            const onlyInPrev = prev.filter((f) => !serverIds.has(f.id));
-            return [...list, ...onlyInPrev];
-          });
-        });
-      }, 800);
+      invalidateFountainCache();
+      setTimeout(() => refetchUserFountains(), 800);
     },
     [userLocation],
   );
@@ -293,6 +311,15 @@ export default function Home() {
   }, [closestFountains, debouncedSearchQuery]);
 
   const handleFountainClick = useCallback((fountain: Fountain) => {
+    if (
+      fountain == null ||
+      (fountain.id !== 0 && !fountain.id) ||
+      typeof fountain.name !== "string" ||
+      !Number.isFinite(fountain.latitude) ||
+      !Number.isFinite(fountain.longitude)
+    ) {
+      return;
+    }
     markerPressTimeRef.current = Date.now();
     setSelectedFountain(fountain);
     setSheetContent("detail");
@@ -349,7 +376,6 @@ export default function Home() {
     [],
   );
 
-  const regionChangeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleAddLocationPress = useCallback(() => {
     if (!isSignedIn) {
@@ -459,22 +485,12 @@ export default function Home() {
         pendingAddCoordinate={pendingAddCoordinate}
         onMapPress={handleMapPress}
         onLongPress={handleMapLongPress}
+        onRegionChangeComplete={handleMapRegionChange}
         onFountainPress={handleFountainClick}
       />
       )}
 
       <View style={styles.addRefillWrap} pointerEvents="box-none">
-        {showOnePlusLottie && (
-          <View style={styles.onePlusLottieWrap}>
-            <LottieView
-              source={require("../../assets/icons/JitterFiles/OnePLus.json")}
-              autoPlay
-              loop={false}
-              onAnimationFinish={handleOnePlusLottieFinish}
-              style={styles.onePlusLottie}
-            />
-          </View>
-        )}
         <Pressable
           style={({ pressed }) => [
             styles.addRefillButton,
@@ -540,13 +556,26 @@ export default function Home() {
           )}
         </View>
         <View style={styles.rightButtons}>
-          <Pressable style={styles.userButton} onPress={handleUserPress}>
-            <Image
-              source={require("../../assets/icons/User.png")}
-              style={styles.iconImage}
-              resizeMode="contain"
-            />
-          </Pressable>
+          <View style={styles.userButtonWrap}>
+            <Pressable style={styles.userButton} onPress={handleUserPress}>
+              <Image
+                source={require("../../assets/icons/User.png")}
+                style={styles.iconImage}
+                resizeMode="contain"
+              />
+            </Pressable>
+            {showOnePlusLottie && (
+              <View style={styles.refillLottieOverlay} pointerEvents="none">
+                <LottieView
+                  source={require("../../assets/icons/JitterFiles/WaterRefillAnimation.json")}
+                  autoPlay
+                  loop={false}
+                  onAnimationFinish={handleOnePlusLottieFinish}
+                  style={styles.refillLottie}
+                />
+              </View>
+            )}
+          </View>
           <Pressable
             style={[
               styles.addLocationButton,
@@ -728,14 +757,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 1,
   },
-  onePlusLottieWrap: {
-    marginBottom: 2,
+  userButtonWrap: {
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
   },
-  onePlusLottie: {
-    width: 48,
-    height: 48,
+  refillLottieOverlay: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refillLottie: {
+    width: 55,
+    height: 55,
   },
   addRefillButton: {
     alignItems: "center",
