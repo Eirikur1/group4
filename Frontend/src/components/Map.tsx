@@ -72,7 +72,7 @@ function deriveRegion(
   };
 }
 
-export default function Map({
+function Map({
   fountains = [],
   region,
   selectedFountain,
@@ -97,7 +97,13 @@ export default function Map({
 
   const startRegion = useMemo(
     () => deriveRegion(region, safeFountains),
-    [region?.latitude, region?.longitude, region?.latitudeDelta, region?.longitudeDelta, safeFountains],
+    [
+      region?.latitude,
+      region?.longitude,
+      region?.latitudeDelta,
+      region?.longitudeDelta,
+      safeFountains,
+    ],
   );
 
   useEffect(() => {
@@ -143,7 +149,12 @@ export default function Map({
   }, [pendingAddCoordinate]);
 
   const handleRegionChangeComplete = useCallback(
-    (r: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => {
+    (r: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    }) => {
       onRegionChangeComplete?.({
         latitude: r.latitude,
         longitude: r.longitude,
@@ -160,8 +171,6 @@ export default function Map({
         mapRef={setMapRef}
         style={styles.map}
         initialRegion={startRegion}
-        minZoomLevel={3}
-        maxZoomLevel={20}
         onPress={onMapPress}
         onLongPress={
           onLongPress
@@ -174,13 +183,15 @@ export default function Map({
         onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation
         showsMyLocationButton
+        showsPointsOfInterest={false}
         customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
-        mapType={(Platform.OS === "ios" ? "muted" : "standard") as any}
+        mapType={(Platform.OS === "ios" ? "mutedStandard" : "standard") as any}
+        userInterfaceStyle={Platform.OS === "ios" ? "dark" : undefined}
         clusteringEnabled
         clusterColor="#FF7A50"
         clusterTextColor="#FFFFFF"
         radius={50}
-        maxZoom={16}
+        maxZoom={30}
         minPoints={2}
         animationEnabled={false}
       >
@@ -219,6 +230,8 @@ export default function Map({
     </View>
   );
 }
+
+export default React.memo(Map);
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

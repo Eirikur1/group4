@@ -100,7 +100,7 @@ function PhotoTile({
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-export default function FountainDetail({
+function FountainDetail({
   fountain,
   saved: savedProp,
   onToggleSaved,
@@ -253,10 +253,8 @@ export default function FountainDetail({
       onPhotosAdded({ ...fountain, images: optimisticImages });
       try {
         const newUrls = await uploadFountainPhotos(uris);
-        // Pass the full merged array — addPhotosToWaterSource does a single UPDATE, no extra SELECT
-        const allImages = [...previousImages, ...newUrls];
-        const updated = await addPhotosToWaterSource(resolvedId, allImages, session?.access_token);
-        if (updated) onPhotosAdded({ ...fountain, images: updated.images ?? allImages });
+        const updated = await addPhotosToWaterSource(resolvedId, newUrls, session?.access_token);
+        if (updated) onPhotosAdded({ ...fountain, images: updated.images ?? optimisticImages });
       } catch (e) {
         onPhotosAdded({ ...fountain, images: previousImages });
         Alert.alert(
@@ -481,16 +479,18 @@ export default function FountainDetail({
               zoomEnabled={false}
               pitchEnabled={false}
               rotateEnabled={false}
+              showsPointsOfInterest={false}
               customMapStyle={
                 Platform.OS === "android" ? darkMapStyle : undefined
               }
               mapType={
-                (Platform.OS === "ios" ? "muted" : undefined) as
+                (Platform.OS === "ios" ? "mutedStandard" : undefined) as
                   | "standard"
                   | "satellite"
                   | "hybrid"
                   | undefined
               }
+              userInterfaceStyle={Platform.OS === "ios" ? "dark" : undefined}
             >
               <Marker
                 coordinate={{
@@ -783,6 +783,8 @@ export default function FountainDetail({
     </View>
   );
 }
+
+export default React.memo(FountainDetail);
 
 const MAP_RADIUS = GRID_MARGIN;
 

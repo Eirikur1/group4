@@ -17,7 +17,7 @@ interface ImageWithSkeletonProps {
   skeletonBorderRadius?: number;
 }
 
-export default function ImageWithSkeleton({
+function ImageWithSkeleton({
   uri,
   containerStyle,
   imageStyle,
@@ -71,6 +71,8 @@ export default function ImageWithSkeleton({
     </View>
   );
 }
+
+export default React.memo(ImageWithSkeleton);
 
 const styles = StyleSheet.create({
   container: {
