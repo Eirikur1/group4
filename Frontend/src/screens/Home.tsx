@@ -13,7 +13,7 @@ import {
   Keyboard,
   Alert,
 } from "react-native";
-import RefillWaterJugIcon from "../../assets/icons/RefillWaterJug.svg";
+import RefillOvalIcon from "../../assets/icons/RefillOval.svg";
 import LottieView from "lottie-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -485,7 +485,7 @@ export default function Home() {
           accessibilityLabel="Log refill"
           accessibilityRole="button"
         >
-          <RefillWaterJugIcon width={40} height={40} />
+          <RefillOvalIcon width={87} height={46} />
         </Pressable>
       </View>
 
@@ -725,8 +725,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 150,
-    alignItems: "flex-start",
-    paddingLeft: GRID_MARGIN,
+    alignItems: "center",
     zIndex: 1,
   },
   onePlusLottieWrap: {
@@ -739,15 +738,8 @@ const styles = StyleSheet.create({
     height: 48,
   },
   addRefillButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.9)",
-    opacity: 0.85,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
   },
   addRefillButtonPressed: {
     opacity: 0.95,
