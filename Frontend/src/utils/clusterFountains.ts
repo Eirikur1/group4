@@ -8,112 +8,116 @@ export interface MapRegion {
 }
 
 export type ClusterItem =
-  | { type: "single"; fountain: Fountain }
-  | { type: "cluster"; latitude: number; longitude: number; count: number; fountains: Fountain[]; isVerified: boolean };
+  | { type: "single"; fountain: Fountain; key: string }
+  | {
+      type: "cluster";
+      key: string;
+      latitude: number;
+      longitude: number;
+      count: number;
+      isVerified: boolean;
+    };
+
+const MAX_MARKERS = 100;
+const PADDING = 1.2; // include points slightly outside visible area to reduce edge flicker
 
 /**
- * Filter fountains to those inside the visible map bounds (with small padding).
+ * Returns fountains whose coordinates fall inside the region's bounding box.
  */
-function fountainsInRegion(fountains: Fountain[], region: MapRegion): Fountain[] {
-  const halfLat = region.latitudeDelta / 2;
-  const halfLon = region.longitudeDelta / 2;
-  const south = region.latitude - halfLat;
-  const north = region.latitude + halfLat;
-  const west = region.longitude - halfLon;
-  const east = region.longitude + halfLon;
-  return fountains.filter(
-    (f) =>
-      f.latitude >= south &&
-      f.latitude <= north &&
-      f.longitude >= west &&
-      f.longitude <= east,
-  );
+function getVisibleFountains(fountains: Fountain[], region: MapRegion): Fountain[] {
+  const halfLat = (region.latitudeDelta * PADDING) / 2;
+  const halfLon = (region.longitudeDelta * PADDING) / 2;
+  const minLat = region.latitude - halfLat;
+  const maxLat = region.latitude + halfLat;
+  const minLon = region.longitude - halfLon;
+  const maxLon = region.longitude + halfLon;
+  const out: Fountain[] = [];
+  for (let i = 0; i < fountains.length; i++) {
+    const f = fountains[i];
+    if (
+      Number.isFinite(f.latitude) &&
+      Number.isFinite(f.longitude) &&
+      f.latitude >= minLat &&
+      f.latitude <= maxLat &&
+      f.longitude >= minLon &&
+      f.longitude <= maxLon
+    ) {
+      out.push(f);
+    }
+  }
+  return out;
 }
 
-/** Max markers to render so the native map doesn't crash when zooming. */
-const MAX_MARKERS = 60;
-
 /**
- * Group fountains into single markers or cluster markers by zoom level.
- * Zoomed out -> coarse grid (e.g. "250" for Iceland). Zoomed in -> individual pins.
- * Never returns more than MAX_MARKERS items to avoid native crashes.
+ * 1. Filter fountains to visible bbox only.
+ * 2. If zoomed in (small deltas): return singles only.
+ * 3. If zoomed out: grid the visible fountains and return clusters + singles.
+ * All items have a stable `key` for React.
  */
-export function clusterFountains(
-  fountains: Fountain[],
-  region: MapRegion,
-): ClusterItem[] {
-  const inView = fountainsInRegion(fountains, region);
-  if (inView.length === 0) return [];
+export function getClusterItems(fountains: Fountain[], region: MapRegion): ClusterItem[] {
+  if (!Array.isArray(fountains) || fountains.length === 0) return [];
 
-  const latDelta = region.latitudeDelta;
-  const lonDelta = region.longitudeDelta;
+  const visible = getVisibleFountains(fountains, region);
+  if (visible.length === 0) return [];
 
-  // Only bunch when very much zoomed out (~3x later than before)
-  const zoomedInThreshold = 1.14;
-  if (
-    latDelta < zoomedInThreshold &&
-    lonDelta < zoomedInThreshold &&
-    inView.length <= MAX_MARKERS
-  ) {
-    return inView.map((fountain) => ({ type: "single" as const, fountain }));
+  const spanLat = Math.max(region.latitudeDelta, 0.0001);
+  const spanLon = Math.max(region.longitudeDelta, 0.0001);
+
+  // Only skip clustering when very zoomed in (tiny area). Default map view uses ~0.02 deltas.
+  const zoomedIn = spanLat <= 0.008 && spanLon <= 0.008;
+  if (zoomedIn) {
+    return visible.slice(0, MAX_MARKERS).map((fountain) => ({
+      type: "single" as const,
+      fountain,
+      key: `single-${fountain.id}`,
+    }));
   }
 
-  // Grid: cap cells so we never exceed MAX_MARKERS
-  const rawCellsPerAxis = Math.max(4, Math.min(30, 0.4 / Math.max(latDelta, lonDelta)));
-  const cellsPerAxis = Math.min(Math.floor(rawCellsPerAxis), Math.floor(Math.sqrt(MAX_MARKERS)));
-  const cellLat = latDelta / cellsPerAxis;
-  const cellLon = lonDelta / cellsPerAxis;
+  // Grid clustering: coarser grid = fewer, larger cells = more clusters
+  const gridSize = 8;
+  const cellLat = spanLat / gridSize;
+  const cellLon = spanLon / gridSize;
+  const grid = new Map<string, Fountain[]>();
 
-  const south = region.latitude - latDelta / 2;
-  const west = region.longitude - lonDelta / 2;
-
-  const buckets = new Map<string, Fountain[]>();
-  for (const f of inView) {
-    const gi = Math.min(Math.floor((f.latitude - south) / cellLat), cellsPerAxis - 1);
-    const gj = Math.min(Math.floor((f.longitude - west) / cellLon), cellsPerAxis - 1);
-    const key = `${gi},${gj}`;
-    const list = buckets.get(key) ?? [];
-    list.push(f);
-    buckets.set(key, list);
+  for (let i = 0; i < visible.length; i++) {
+    const f = visible[i];
+    const ci = Math.floor((f.latitude - (region.latitude - spanLat / 2)) / cellLat);
+    const cj = Math.floor((f.longitude - (region.longitude - spanLon / 2)) / cellLon);
+    const cellKey = `${ci}:${cj}`;
+    const bucket = grid.get(cellKey);
+    if (bucket) bucket.push(f);
+    else grid.set(cellKey, [f]);
   }
 
-  const result: ClusterItem[] = [];
-  buckets.forEach((list) => {
-    if (list.length === 1) {
-      result.push({ type: "single", fountain: list[0] });
-    } else {
-      const lat = list.reduce((s, f) => s + f.latitude, 0) / list.length;
-      const lon = list.reduce((s, f) => s + f.longitude, 0) / list.length;
-      const verifiedCount = list.reduce((n, f) => n + (f.useAdminPin ? 1 : 0), 0);
-      result.push({ type: "cluster", latitude: lat, longitude: lon, count: list.length, fountains: list, isVerified: verifiedCount >= list.length / 2 });
+  const clusters: ClusterItem[] = [];
+  const singles: ClusterItem[] = [];
+  for (const [cellKey, bucket] of grid.entries()) {
+    if (bucket.length === 1) {
+      singles.push({
+        type: "single",
+        fountain: bucket[0],
+        key: `single-${bucket[0].id}`,
+      });
+      continue;
     }
-  });
-
-  if (result.length <= MAX_MARKERS) return result;
-
-  // Too many items: merge into fewer clusters by using a coarser grid
-  const mergeCells = Math.max(2, Math.floor(Math.sqrt(MAX_MARKERS)));
-  const mergeCellLat = latDelta / mergeCells;
-  const mergeCellLon = lonDelta / mergeCells;
-  const mergeBuckets = new Map<string, Fountain[]>();
-  for (const f of inView) {
-    const gi = Math.min(Math.floor((f.latitude - south) / mergeCellLat), mergeCells - 1);
-    const gj = Math.min(Math.floor((f.longitude - west) / mergeCellLon), mergeCells - 1);
-    const key = `${gi},${gj}`;
-    const list = mergeBuckets.get(key) ?? [];
-    list.push(f);
-    mergeBuckets.set(key, list);
-  }
-  const merged: ClusterItem[] = [];
-  mergeBuckets.forEach((list) => {
-    if (list.length === 1) {
-      merged.push({ type: "single", fountain: list[0] });
-    } else {
-      const lat = list.reduce((s, f) => s + f.latitude, 0) / list.length;
-      const lon = list.reduce((s, f) => s + f.longitude, 0) / list.length;
-      const verifiedCount = list.reduce((n, f) => n + (f.useAdminPin ? 1 : 0), 0);
-      merged.push({ type: "cluster", latitude: lat, longitude: lon, count: list.length, fountains: list, isVerified: verifiedCount >= list.length / 2 });
+    let sumLat = 0;
+    let sumLon = 0;
+    let verified = 0;
+    for (let i = 0; i < bucket.length; i++) {
+      const f = bucket[i];
+      sumLat += f.latitude;
+      sumLon += f.longitude;
+      if (f.useAdminPin) verified += 1;
     }
-  });
-  return merged;
+    clusters.push({
+      type: "cluster",
+      key: `cluster-${cellKey}`,
+      latitude: sumLat / bucket.length,
+      longitude: sumLon / bucket.length,
+      count: bucket.length,
+      isVerified: verified >= bucket.length / 2,
+    });
+  }
+  const combined = [...clusters, ...singles];
+  return combined.slice(0, MAX_MARKERS);
 }
