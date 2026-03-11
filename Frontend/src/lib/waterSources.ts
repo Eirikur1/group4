@@ -56,12 +56,16 @@ function rowToFountain(row: SupabaseRow): Fountain {
  *   latitude BETWEEN south AND north
  *   longitude BETWEEN west AND east
  */
-export async function fetchFountainsInBounds(bounds: MapBounds): Promise<Fountain[]> {
+export async function fetchFountainsInBounds(
+  bounds: MapBounds,
+): Promise<Fountain[]> {
   if (!supabase) return [];
   try {
     const { data, error } = await supabase
       .from("water_sources")
-      .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
+      .select(
+        "id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by",
+      )
       .gte("latitude", bounds.south)
       .lte("latitude", bounds.north)
       .gte("longitude", bounds.west)
@@ -105,7 +109,9 @@ function expandBounds(b: MapBounds, factor = 0.3): MapBounds {
  * Fetch with caching. When we actually query, we fetch an expanded area so
  * small pans reuse the cache without hitting Supabase.
  */
-export async function fetchFountainsInBoundsCached(bounds: MapBounds): Promise<Fountain[]> {
+export async function fetchFountainsInBoundsCached(
+  bounds: MapBounds,
+): Promise<Fountain[]> {
   if (cachedBounds && boundsContain(cachedBounds, bounds)) {
     return cachedFountains;
   }
@@ -130,7 +136,9 @@ export async function fetchVerifiedFountains(): Promise<Fountain[]> {
   try {
     const { data, error } = await supabase
       .from("water_sources")
-      .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
+      .select(
+        "id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by",
+      )
       .eq("is_verified", true)
       .limit(MARKER_LIMIT);
     if (error || !data) return [];
@@ -145,7 +153,9 @@ export async function fetchUserWaterSources(): Promise<Fountain[]> {
   try {
     const { data, error } = await supabase
       .from("water_sources")
-      .select("id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by")
+      .select(
+        "id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by",
+      )
       .eq("is_verified", false)
       .order("created_at", { ascending: false })
       .limit(MARKER_LIMIT);
@@ -173,12 +183,12 @@ const REQUEST_TIMEOUT_MS = 60_000; // 60s for slow networks / cold backend
 /** Insert a user-uploaded water source via the backend. Requires accessToken (sign in). Returns the new Fountain or null. */
 export async function insertWaterSource(
   input: InsertWaterSourceInput,
-  accessToken: string | undefined
+  accessToken: string | undefined,
 ): Promise<Fountain | null> {
   const base = getBaseUrl();
   if (!base) {
     throw new Error(
-      "Backend URL not set. Add EXPO_PUBLIC_API_URL to a .env file in the Frontend folder (e.g. http://localhost:3000), then restart the dev server."
+      "Backend URL not set. Add EXPO_PUBLIC_API_URL to a .env file in the Frontend folder (e.g. http://localhost:3000), then restart the dev server.",
     );
   }
   if (!accessToken) {
@@ -202,7 +212,9 @@ export async function insertWaterSource(
     clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to create water source");
+      throw new Error(
+        (err as { error?: string }).error ?? "Failed to create water source",
+      );
     }
     const data = (await res.json()) as Fountain;
     return data ?? null;
@@ -212,7 +224,10 @@ export async function insertWaterSource(
     const isNetwork =
       e instanceof TypeError ||
       (e instanceof Error &&
-        (/network request timed out|timeout|failed to fetch|network error/i.test(e.message) || isAbort));
+        (/network request timed out|timeout|failed to fetch|network error/i.test(
+          e.message,
+        ) ||
+          isAbort));
     if (isNetwork || isAbort) {
       const hint =
         base.includes("localhost") || base.includes("127.0.0.1")
@@ -233,11 +248,12 @@ export async function getOrCreateWaterSourceForOsm(
   name: string,
   latitude: number,
   longitude: number,
-  accessToken: string | undefined
+  accessToken: string | undefined,
 ): Promise<Fountain | null> {
   const base = getBaseUrl();
   if (!base) throw new Error("Backend URL not set.");
-  if (!accessToken) throw new Error("Sign in to add photos or rate this location.");
+  if (!accessToken)
+    throw new Error("Sign in to add photos or rate this location.");
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -255,7 +271,9 @@ export async function getOrCreateWaterSourceForOsm(
     clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to load location");
+      throw new Error(
+        (err as { error?: string }).error ?? "Failed to load location",
+      );
     }
     const data = (await res.json()) as Fountain;
     return data ?? null;
@@ -269,7 +287,7 @@ export async function getOrCreateWaterSourceForOsm(
 export async function addPhotosToWaterSource(
   id: string,
   images: string[],
-  accessToken: string | undefined
+  accessToken: string | undefined,
 ): Promise<Fountain | null> {
   const base = getBaseUrl();
   if (!base) throw new Error("Backend URL not set.");
@@ -286,7 +304,9 @@ export async function addPhotosToWaterSource(
     clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to update images");
+      throw new Error(
+        (err as { error?: string }).error ?? "Failed to update images",
+      );
     }
     return (await res.json()) as Fountain;
   } catch (e) {
@@ -295,7 +315,10 @@ export async function addPhotosToWaterSource(
     const isNetwork =
       e instanceof TypeError ||
       (e instanceof Error &&
-        (/network request timed out|timeout|failed to fetch|network error/i.test(e.message) || isAbort));
+        (/network request timed out|timeout|failed to fetch|network error/i.test(
+          e.message,
+        ) ||
+          isAbort));
     if (isNetwork || isAbort) {
       const hint =
         base.includes("localhost") || base.includes("127.0.0.1")
@@ -311,7 +334,7 @@ export async function addPhotosToWaterSource(
 export async function updateWaterSource(
   id: string,
   input: UpdateWaterSourceInput,
-  accessToken: string | undefined
+  accessToken: string | undefined,
 ): Promise<Fountain | null> {
   const base = getBaseUrl();
   if (!base) throw new Error("Backend URL not set.");
@@ -328,7 +351,9 @@ export async function updateWaterSource(
     clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to update location");
+      throw new Error(
+        (err as { error?: string }).error ?? "Failed to update location",
+      );
     }
     return (await res.json()) as Fountain;
   } catch (e) {
@@ -337,7 +362,10 @@ export async function updateWaterSource(
     const isNetwork =
       e instanceof TypeError ||
       (e instanceof Error &&
-        (/network request timed out|timeout|failed to fetch|network error/i.test(e.message) || isAbort));
+        (/network request timed out|timeout|failed to fetch|network error/i.test(
+          e.message,
+        ) ||
+          isAbort));
     if (isNetwork || isAbort) {
       const hint =
         base.includes("localhost") || base.includes("127.0.0.1")
@@ -352,7 +380,7 @@ export async function updateWaterSource(
 /** Delete a water source. Creator only; pass accessToken. */
 export async function deleteWaterSource(
   id: string,
-  accessToken: string | undefined
+  accessToken: string | undefined,
 ): Promise<void> {
   const base = getBaseUrl();
   if (!base) throw new Error("Backend URL not set.");
@@ -368,7 +396,9 @@ export async function deleteWaterSource(
     clearTimeout(timeoutId);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to delete location");
+      throw new Error(
+        (err as { error?: string }).error ?? "Failed to delete location",
+      );
     }
   } catch (e) {
     clearTimeout(timeoutId);
@@ -376,7 +406,10 @@ export async function deleteWaterSource(
     const isNetwork =
       e instanceof TypeError ||
       (e instanceof Error &&
-        (/network request timed out|timeout|failed to fetch|network error/i.test(e.message) || isAbort));
+        (/network request timed out|timeout|failed to fetch|network error/i.test(
+          e.message,
+        ) ||
+          isAbort));
     if (isNetwork || isAbort) {
       const hint =
         base.includes("localhost") || base.includes("127.0.0.1")

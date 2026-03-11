@@ -5,11 +5,21 @@ import {
   Pressable,
   StyleSheet,
   Image,
+  Platform,
 } from "react-native";
+import MapView, { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
 import { GRID_GUTTER_HALF } from "../constants/grid";
 import StarIcon from "../../assets/icons/Star.svg";
+import { darkMapStyle } from "../constants/mapStyles";
+
+const thumbRegion = (f: Fountain) => ({
+  latitude: f.latitude,
+  longitude: f.longitude,
+  latitudeDelta: 0.01,
+  longitudeDelta: 0.01,
+});
 
 interface FountainCardProps {
   fountain: Fountain;
@@ -25,17 +35,33 @@ function FountainCard({ fountain, onClick, onPressFountain }: FountainCardProps)
       onPress={handlePress}
     >
       <View style={styles.thumbWrap}>
-        <View style={styles.thumbMap}>
-          <Image
-            source={
-              fountain.useAdminPin
-                ? require("../../assets/icons/AdminPin.png")
-                : require("../../assets/icons/PinIcon.png")
-            }
-            style={styles.thumbPin}
-            resizeMode="contain"
-          />
-        </View>
+        <MapView
+          style={styles.thumbMap}
+          initialRegion={thumbRegion(fountain)}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+          showsPointsOfInterest={false}
+          customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
+          mapType={(Platform.OS === "ios" ? "mutedStandard" : "standard") as "standard" | "satellite" | "hybrid" | undefined}
+        >
+          <Marker
+            coordinate={{ latitude: fountain.latitude, longitude: fountain.longitude }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}
+          >
+            <Image
+              source={
+                fountain.useAdminPin
+                  ? require("../../assets/icons/AdminPin.png")
+                  : require("../../assets/icons/PinIcon.png")
+              }
+              style={styles.thumbPin}
+              resizeMode="contain"
+            />
+          </Marker>
+        </MapView>
       </View>
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>
@@ -75,13 +101,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginRight: GRID_GUTTER_HALF + 4,
   },
-  thumbMap: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#E8F4F0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  thumbMap: { width: "100%", height: "100%" },
   thumbPin: { width: 18, height: 18 },
   content: { flex: 1 },
   title: {

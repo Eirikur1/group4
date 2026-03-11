@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useMemo, useCallback } from "react";
-import { StyleSheet, View, Platform } from "react-native";
+import { StyleSheet, View, Platform, Pressable } from "react-native";
 import MapView from "react-native-map-clustering";
 import { Marker } from "react-native-maps";
+import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
 import { darkMapStyle } from "../constants/mapStyles";
+import { GRID_MARGIN } from "../constants/grid";
 
 const DEFAULT_REGION = {
   latitude: 28.1235,
@@ -165,6 +167,19 @@ function Map({
     [onRegionChangeComplete],
   );
 
+  const handleMyLocationPress = useCallback(() => {
+    if (!region || !mapRef.current) return;
+    mapRef.current.animateToRegion?.(
+      {
+        latitude: region.latitude,
+        longitude: region.longitude,
+        latitudeDelta: region.latitudeDelta ?? 0.02,
+        longitudeDelta: region.longitudeDelta ?? 0.02,
+      },
+      500,
+    );
+  }, [region]);
+
   return (
     <View style={styles.container}>
       <MapView
@@ -182,7 +197,8 @@ function Map({
         }
         onRegionChangeComplete={handleRegionChangeComplete}
         showsUserLocation
-        showsMyLocationButton
+        showsMyLocationButton={false}
+        compassOffset={Platform.OS === "ios" ? { x: 12, y: 155 } : undefined}
         showsPointsOfInterest={false}
         customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
         mapType={(Platform.OS === "ios" ? "mutedStandard" : "standard") as any}
@@ -227,13 +243,52 @@ function Map({
           />
         ))}
       </MapView>
+      {region && (
+        <View style={styles.myLocationWrap} pointerEvents="box-none">
+          <Pressable
+            style={({ pressed }) => [
+              styles.myLocationButton,
+              pressed && styles.myLocationButtonPressed,
+            ]}
+            onPress={handleMyLocationPress}
+            accessibilityLabel="Center on my location"
+            accessibilityRole="button"
+          >
+            <Ionicons name="locate" size={22} color="#333333" />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
 export default React.memo(Map);
 
+const BOTTOM_REFILL_ROW = 150;
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   map: { width: "100%", height: "100%" },
+  myLocationWrap: {
+    position: "absolute",
+    bottom: BOTTOM_REFILL_ROW,
+    right: GRID_MARGIN,
+    zIndex: 1,
+  },
+  myLocationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  myLocationButtonPressed: {
+    opacity: 0.9,
+  },
 });

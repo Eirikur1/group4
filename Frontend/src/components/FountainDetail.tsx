@@ -490,7 +490,6 @@ function FountainDetail({
                   | "hybrid"
                   | undefined
               }
-              userInterfaceStyle={Platform.OS === "ios" ? "dark" : undefined}
             >
               <Marker
                 coordinate={{

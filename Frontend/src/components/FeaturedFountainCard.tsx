@@ -1,8 +1,17 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, Image } from "react-native";
+import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import MapView, { Marker } from "react-native-maps";
 import type { Fountain } from "../types/fountain";
 import StarIcon from "../../assets/icons/Star.svg";
 import { GRID_MARGIN } from "../constants/grid";
+import { darkMapStyle } from "../constants/mapStyles";
+
+const region = (f: Fountain) => ({
+  latitude: f.latitude,
+  longitude: f.longitude,
+  latitudeDelta: 0.006,
+  longitudeDelta: 0.006,
+});
 
 interface FeaturedFountainCardProps {
   fountain: Fountain;
@@ -22,17 +31,28 @@ function FeaturedFountainCard({
       onPress={handlePress}
     >
       <View style={styles.mapWrap}>
-        <View style={styles.map}>
-          <Image
-            source={
+        <MapView
+          style={styles.map}
+          initialRegion={region(fountain)}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          pitchEnabled={false}
+          rotateEnabled={false}
+          showsPointsOfInterest={false}
+          customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
+          mapType={(Platform.OS === "ios" ? "mutedStandard" : "standard") as "standard" | "satellite" | "hybrid" | undefined}
+        >
+          <Marker
+            coordinate={{ latitude: fountain.latitude, longitude: fountain.longitude }}
+            image={
               fountain.useAdminPin
                 ? require("../../assets/icons/AdminPin.png")
                 : require("../../assets/icons/PinIcon.png")
             }
-            style={styles.featuredPin}
-            resizeMode="contain"
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
           />
-        </View>
+        </MapView>
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>
@@ -74,14 +94,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 12,
     overflow: "hidden",
   },
-  map: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#E8F4F0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  featuredPin: { width: 32, height: 32 },
+  map: { width: "100%", height: "100%" },
   body: { padding: GRID_MARGIN },
   title: {
     fontSize: 18,
