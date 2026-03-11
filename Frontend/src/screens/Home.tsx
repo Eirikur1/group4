@@ -30,7 +30,7 @@ import * as Location from "expo-location";
 import {
   Map,
   BottomSheet,
-  FeaturedFountainCard,
+  ClosestFountainRow,
   FountainCard,
   FountainDetail,
   ProfileMenu,
@@ -93,6 +93,7 @@ export default function Home() {
   } | null>(null);
   const [selectedFountainSaved, setSelectedFountainSaved] = useState(false);
   const [showOnePlusLottie, setShowOnePlusLottie] = useState(false);
+  const [showRefillProfileBadge, setShowRefillProfileBadge] = useState(false);
   const [loggingRefill, setLoggingRefill] = useState(false);
   const onePlusLottieTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -302,6 +303,7 @@ export default function Home() {
       onePlusLottieTimeoutRef.current = null;
     }
     setShowOnePlusLottie(false);
+    setShowRefillProfileBadge(true);
   }, []);
 
   const closestFountains = useMemo(() => {
@@ -480,6 +482,7 @@ export default function Home() {
         onePlusLottieTimeoutRef.current = setTimeout(() => {
           onePlusLottieTimeoutRef.current = null;
           setShowOnePlusLottie(false);
+          setShowRefillProfileBadge(true);
         }, 5000);
       } else {
         Alert.alert("Couldn't log refill", "Please try again.");
@@ -498,6 +501,7 @@ export default function Home() {
   }, []);
 
   const handleUserPress = useCallback(() => {
+    setShowRefillProfileBadge(false);
     setSheetContent("profile");
     setCurrentSnap(1);
   }, []);
@@ -646,6 +650,9 @@ export default function Home() {
                 />
               </View>
             )}
+            {showRefillProfileBadge && (
+              <View style={styles.refillProfileBadge} pointerEvents="none" />
+            )}
           </View>
           <Pressable
             style={[
@@ -704,27 +711,20 @@ export default function Home() {
               <FlatList
                 data={closestFountains}
                 keyExtractor={(f) => String(f.id)}
-                renderItem={({ item: fountain, index }) =>
-                  index === 0 ? (
-                    <FeaturedFountainCard
-                      fountain={fountain}
-                      onPressFountain={handleFountainClick}
-                    />
-                  ) : (
-                    <FountainCard
-                      fountain={fountain}
-                      onPressFountain={handleFountainClick}
-                    />
-                  )
-                }
+                renderItem={({ item: fountain }) => (
+                  <ClosestFountainRow
+                    fountain={fountain}
+                    onPressFountain={handleFountainClick}
+                  />
+                )}
                 style={styles.listItems}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
-                initialNumToRender={8}
-                maxToRenderPerBatch={6}
-                windowSize={6}
-                removeClippedSubviews={Platform.OS === "android"}
+                initialNumToRender={6}
+                maxToRenderPerBatch={4}
+                windowSize={5}
+                removeClippedSubviews={true}
               />
             </View>
           )}
@@ -822,6 +822,15 @@ const styles = StyleSheet.create({
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
+  },
+  refillProfileBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#007AFF",
   },
   refillLottieOverlay: {
     position: "absolute",
