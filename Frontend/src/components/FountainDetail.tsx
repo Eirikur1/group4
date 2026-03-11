@@ -121,7 +121,12 @@ function FountainDetail({
   useEffect(() => {
     if (!isOsm || typeof fountain.id !== "number") return;
     let cancelled = false;
-    resolveOsmToUuid(fountain.id, fountain.name, fountain.latitude, fountain.longitude)
+    resolveOsmToUuid(
+      fountain.id,
+      fountain.name,
+      fountain.latitude,
+      fountain.longitude,
+    )
       .then((id) => {
         if (cancelled || !id) return;
         setResolvedFountain({ ...fountain, id });
@@ -130,7 +135,13 @@ function FountainDetail({
     return () => {
       cancelled = true;
     };
-  }, [isOsm, fountain.id, fountain.name, fountain.latitude, fountain.longitude]);
+  }, [
+    isOsm,
+    fountain.id,
+    fountain.name,
+    fountain.latitude,
+    fountain.longitude,
+  ]);
 
   const urls: string[] =
     (effectiveFountain.images?.length ?? 0) > 0
@@ -158,12 +169,11 @@ function FountainDetail({
     !!user &&
     !!effectiveFountain.createdBy &&
     effectiveFountain.createdBy.id === user.id;
-  const hasNoCreator = typeof effectiveFountain.id === "string" && !effectiveFountain.createdBy;
+  const hasNoCreator =
+    typeof effectiveFountain.id === "string" && !effectiveFountain.createdBy;
   // OSM fountains: any signed-in user can add photos (resolved on demand)
   const canAddPhotos =
-    !!onPhotosAdded &&
-    isSignedIn &&
-    (isOwner || hasNoCreator || isOsm);
+    !!onPhotosAdded && isSignedIn && (isOwner || hasNoCreator || isOsm);
 
   const totalSlides = urls.length + (canAddPhotos ? 1 : 0);
 
@@ -213,7 +223,9 @@ function FountainDetail({
   }
 
   /** Resolve an OSM fountain to a Supabase UUID on-demand (called when user adds photo, saves, or rates). */
-  const resolveOsmFountainNow = useCallback(async (): Promise<string | null> => {
+  const resolveOsmFountainNow = useCallback(async (): Promise<
+    string | null
+  > => {
     if (typeof effectiveFountain.id === "string") return effectiveFountain.id;
     if (typeof fountain.id !== "number") return null;
     setResolving(true);
@@ -238,23 +250,36 @@ function FountainDetail({
     async (uris: string[]) => {
       if (!uris.length || !onPhotosAdded) return;
       setAddingPhoto(true);
-      let resolvedId = typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
+      let resolvedId =
+        typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
       if (!resolvedId) {
         resolvedId = await resolveOsmFountainNow();
       }
       if (!resolvedId) {
         setAddingPhoto(false);
-        Alert.alert("Upload failed", "Could not connect to backend. Check your connection and try again.");
+        Alert.alert(
+          "Upload failed",
+          "Could not connect to backend. Check your connection and try again.",
+        );
         return;
       }
       const previousImages =
-        effectiveFountain.images ?? (effectiveFountain.imageUrl ? [effectiveFountain.imageUrl] : []);
+        effectiveFountain.images ??
+        (effectiveFountain.imageUrl ? [effectiveFountain.imageUrl] : []);
       const optimisticImages = [...previousImages, ...uris];
       onPhotosAdded({ ...fountain, images: optimisticImages });
       try {
         const newUrls = await uploadFountainPhotos(uris);
-        const updated = await addPhotosToWaterSource(resolvedId, newUrls, session?.access_token);
-        if (updated) onPhotosAdded({ ...fountain, images: updated.images ?? optimisticImages });
+        const updated = await addPhotosToWaterSource(
+          resolvedId,
+          newUrls,
+          session?.access_token,
+        );
+        if (updated)
+          onPhotosAdded({
+            ...fountain,
+            images: updated.images ?? optimisticImages,
+          });
       } catch (e) {
         onPhotosAdded({ ...fountain, images: previousImages });
         Alert.alert(
@@ -265,7 +290,13 @@ function FountainDetail({
         setAddingPhoto(false);
       }
     },
-    [fountain, effectiveFountain, onPhotosAdded, session?.access_token, resolveOsmFountainNow],
+    [
+      fountain,
+      effectiveFountain,
+      onPhotosAdded,
+      session?.access_token,
+      resolveOsmFountainNow,
+    ],
   );
 
   const addFromLibrary = useCallback(async () => {
@@ -322,7 +353,8 @@ function FountainDetail({
       );
       return;
     }
-    let fountainId = typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
+    let fountainId =
+      typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
     if (!fountainId && isOsm) {
       fountainId = await resolveOsmFountainNow();
     }
@@ -352,14 +384,23 @@ function FountainDetail({
         e instanceof Error ? e.message : "Could not update saved location.",
       );
     }
-  }, [isSignedIn, isOsm, effectiveFountain.id, saved, onSavedChanged, navigation, resolveOsmFountainNow]);
+  }, [
+    isSignedIn,
+    isOsm,
+    effectiveFountain.id,
+    saved,
+    onSavedChanged,
+    navigation,
+    resolveOsmFountainNow,
+  ]);
 
   const canRate = isSignedIn && onRatingChanged != null;
   const handleRate = useCallback(
     async (rating: number) => {
       if (!canRate) return;
       // Ensure we have a real UUID before hitting the ratings table
-      let resolvedRatingId = typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
+      let resolvedRatingId =
+        typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
       if (!resolvedRatingId) {
         resolvedRatingId = await resolveOsmFountainNow();
       }
@@ -381,7 +422,13 @@ function FountainDetail({
         );
       }
     },
-    [canRate, effectiveFountain, fountain, onRatingChanged, resolveOsmFountainNow],
+    [
+      canRate,
+      effectiveFountain,
+      fountain,
+      onRatingChanged,
+      resolveOsmFountainNow,
+    ],
   );
 
   const handleDelete = useCallback(() => {
@@ -459,7 +506,12 @@ function FountainDetail({
     } finally {
       setSavingEdit(false);
     }
-  }, [effectiveFountain.id, editName, session?.access_token, onFountainUpdated]);
+  }, [
+    effectiveFountain.id,
+    editName,
+    session?.access_token,
+    onFountainUpdated,
+  ]);
 
   return (
     <View style={styles.container}>
@@ -542,7 +594,9 @@ function FountainDetail({
                 ) : null}
                 {effectiveFountain.rating != null && (
                   <View style={styles.rating}>
-                    <Text style={styles.ratingValue}>{effectiveFountain.rating}</Text>
+                    <Text style={styles.ratingValue}>
+                      {effectiveFountain.rating}
+                    </Text>
                     <StarIcon
                       width={18}
                       height={18}
@@ -707,11 +761,13 @@ function FountainDetail({
               </View>
             </View>
 
-            {typeof effectiveFountain.id === "string" && effectiveFountain.createdBy && (
-              <Text style={styles.addedByFooter} numberOfLines={1}>
-                Added by {effectiveFountain.createdBy.displayName ?? "Someone"}
-              </Text>
-            )}
+            {typeof effectiveFountain.id === "string" &&
+              effectiveFountain.createdBy && (
+                <Text style={styles.addedByFooter} numberOfLines={1}>
+                  Added by{" "}
+                  {effectiveFountain.createdBy.displayName ?? "Someone"}
+                </Text>
+              )}
           </View>
         </View>
 

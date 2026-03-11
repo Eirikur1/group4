@@ -20,14 +20,17 @@ export interface MapBounds {
   west: number;
 }
 
+// Hard cap for heavy lists (e.g. saved/user lists)
 const MARKER_LIMIT = 300;
+// Tighter cap for map markers (keeps clustering + RAM under control)
+const BOUNDS_MARKER_LIMIT = 150;
 
 type SupabaseRow = {
   id: string;
   name: string;
   latitude: number;
   longitude: number;
-  images: string[] | null;
+  // Lightweight fields for map/list visualization; heavy fields are fetched on-demand
   rating: number | null;
   is_operational: boolean;
   is_verified: boolean | null;
@@ -40,11 +43,9 @@ function rowToFountain(row: SupabaseRow): Fountain {
     name: row.name,
     latitude: row.latitude,
     longitude: row.longitude,
-    images: row.images ?? undefined,
-    imageUrl: row.images?.[0],
     rating: row.rating ?? undefined,
     isOperational: row.is_operational ?? true,
-    useAdminPin: row.is_verified ?? false,
+    useAdminPin: false,
     createdBy: row.created_by ? { id: row.created_by } : undefined,
   };
 }
@@ -64,13 +65,13 @@ export async function fetchFountainsInBounds(
     const { data, error } = await supabase
       .from("water_sources")
       .select(
-        "id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by",
+        "id, name, latitude, longitude, rating, is_operational, is_verified, created_by",
       )
       .gte("latitude", bounds.south)
       .lte("latitude", bounds.north)
       .gte("longitude", bounds.west)
       .lte("longitude", bounds.east)
-      .limit(MARKER_LIMIT);
+      .limit(BOUNDS_MARKER_LIMIT);
     if (error || !data) return [];
     return (data as SupabaseRow[]).map(rowToFountain);
   } catch {
@@ -163,6 +164,41 @@ export async function fetchUserWaterSources(): Promise<Fountain[]> {
     return (data as SupabaseRow[]).map(rowToFountain);
   } catch {
     return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// On-demand full detail fetch — used when a pin/card is opened
+// ---------------------------------------------------------------------------
+
+export async function fetchFountainById(id: string): Promise<Fountain | null> {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("water_sources")
+      .select(
+        "id, name, latitude, longitude, images, rating, is_operational, is_verified, created_by",
+      )
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return null;
+    const row = data as SupabaseRow & {
+      images: string[] | null;
+    };
+    return {
+      id: row.id,
+      name: row.name,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      images: row.images ?? undefined,
+      imageUrl: row.images?.[0],
+      rating: row.rating ?? undefined,
+      isOperational: row.is_operational ?? true,
+      useAdminPin: false,
+      createdBy: row.created_by ? { id: row.created_by } : undefined,
+    };
+  } catch {
+    return null;
   }
 }
 

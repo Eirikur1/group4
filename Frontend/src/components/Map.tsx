@@ -207,7 +207,8 @@ function Map({
         clusterColor="#FF7A50"
         clusterTextColor="#FFFFFF"
         radius={50}
-        maxZoom={30}
+        // Lower maxZoom so the clustering index tree is shallower
+        maxZoom={20}
         minPoints={2}
         animationEnabled={false}
       >
@@ -233,11 +234,7 @@ function Map({
             anchor={{ x: 0.5, y: 1 }}
             tracksViewChanges={false}
             image={
-              fountain.useAdminPin
-                ? require("../../assets/icons/AdminPin.png")
-                : fountain.isOperational
-                  ? require("../../assets/icons/PinIcon.png")
-                  : require("../../assets/icons/AdminPin.png")
+              fountain.isOperational ? require("../../assets/icons/PinIcon.png") : require("../../assets/icons/AdminPin.png")
             }
             onPress={() => onFountainPress?.(fountain)}
           />
