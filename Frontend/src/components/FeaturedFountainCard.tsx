@@ -1,17 +1,8 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import { View, Text, Pressable, StyleSheet, Image } from "react-native";
 import type { Fountain } from "../types/fountain";
 import StarIcon from "../../assets/icons/Star.svg";
 import { GRID_MARGIN } from "../constants/grid";
-import { darkMapStyle } from "../constants/mapStyles";
-
-const region = (f: Fountain) => ({
-  latitude: f.latitude,
-  longitude: f.longitude,
-  latitudeDelta: 0.006,
-  longitudeDelta: 0.006,
-});
 
 interface FeaturedFountainCardProps {
   fountain: Fountain;
@@ -30,29 +21,14 @@ function FeaturedFountainCard({
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={handlePress}
     >
-      <View style={styles.mapWrap}>
-        <MapView
-          style={styles.map}
-          initialRegion={region(fountain)}
-          scrollEnabled={false}
-          zoomEnabled={false}
-          pitchEnabled={false}
-          rotateEnabled={false}
-          showsPointsOfInterest={false}
-          customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
-          mapType={(Platform.OS === "ios" ? "mutedStandard" : "standard") as "standard" | "satellite" | "hybrid" | undefined}
-        >
-          <Marker
-            coordinate={{ latitude: fountain.latitude, longitude: fountain.longitude }}
-            image={
-              fountain.useAdminPin
-                ? require("../../assets/icons/AdminPin.png")
-                : require("../../assets/icons/PinIcon.png")
-            }
-            anchor={{ x: 0.5, y: 1 }}
-            tracksViewChanges={false}
+      <View style={styles.heroThumb}>
+        <View style={styles.heroThumbInner}>
+          <Image
+            source={require("../../assets/icons/PinIcon.png")}
+            style={styles.heroPin}
+            resizeMode="contain"
           />
-        </MapView>
+        </View>
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>
@@ -85,16 +61,22 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardPressed: { opacity: 0.95 },
-  mapWrap: {
+  heroThumb: {
     height: 140,
     width: "100%",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    overflow: "hidden",
+    backgroundColor: "#E0F2FE",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  map: { width: "100%", height: "100%" },
+  heroThumbInner: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#0EA5E9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroPin: { width: 40, height: 40 },
   body: { padding: GRID_MARGIN },
   title: {
     fontSize: 18,

@@ -21,7 +21,7 @@ function toFountain(row: WaterSourceRow): Fountain {
     name: row.name,
     latitude: row.latitude,
     longitude: row.longitude,
-    images: row.images ?? undefined,
+    // For saved lists we keep only a lightweight preview; full details are fetched on demand
     imageUrl: row.images?.[0],
     rating: row.rating ?? undefined,
     isOperational: row.is_operational ?? true,

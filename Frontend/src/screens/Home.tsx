@@ -43,6 +43,7 @@ import {
   fetchFountainsInBoundsCached,
   invalidateFountainCache,
   type MapBounds,
+  fetchFountainById,
 } from "../lib/waterSources";
 import {
   fetchSavedLocations,
@@ -103,6 +104,9 @@ export default function Home() {
     | { type: "addSource" }
     | null
   >(null);
+  const fountainDetailsCacheRef = useRef<Record<string, Fountain>>({});
+  const fountainDetailsOrderRef = useRef<string[]>([]);
+  const MAX_DETAIL_CACHE = 100;
 
   useEffect(() => {
     (async () => {
@@ -338,7 +342,7 @@ export default function Home() {
     return list.slice(0, 5);
   }, [closestFountains, debouncedSearchQuery]);
 
-  const handleFountainClick = useCallback((fountain: Fountain) => {
+  const handleFountainClick = useCallback(async (fountain: Fountain) => {
     if (
       fountain == null ||
       (fountain.id !== 0 && !fountain.id) ||
@@ -349,7 +353,32 @@ export default function Home() {
       return;
     }
     markerPressTimeRef.current = Date.now();
-    setSelectedFountain(fountain);
+    let full = fountain;
+    const id = fountain.id;
+    if (typeof id === "string") {
+      const cached = fountainDetailsCacheRef.current[id];
+      if (cached) {
+        full = { ...cached, distance: fountain.distance ?? cached.distance };
+      } else {
+        try {
+          const loaded = await fetchFountainById(id);
+          if (loaded) {
+            fountainDetailsCacheRef.current[id] = loaded;
+            fountainDetailsOrderRef.current.push(id);
+            if (fountainDetailsOrderRef.current.length > MAX_DETAIL_CACHE) {
+              const evictId = fountainDetailsOrderRef.current.shift();
+              if (evictId) {
+                delete fountainDetailsCacheRef.current[evictId];
+              }
+            }
+            full = { ...loaded, distance: fountain.distance ?? loaded.distance };
+          }
+        } catch {
+          // ignore and fall back to shallow fountain
+        }
+      }
+    }
+    setSelectedFountain(full);
     setSheetContent("detail");
     setCurrentSnap(1);
   }, []);

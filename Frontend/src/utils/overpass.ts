@@ -3,7 +3,9 @@ import type { Fountain } from "../types/fountain";
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
 /** Build an image URL from OSM tags (image=, wikimedia_commons=). */
-function imageUrlFromTags(tags: Record<string, string> | undefined): string | undefined {
+function imageUrlFromTags(
+  tags: Record<string, string> | undefined,
+): string | undefined {
   if (!tags) return undefined;
   const img = tags.image ?? tags.photo ?? tags.image_url ?? tags.photo_url;
   if (img?.startsWith("http")) return img;
@@ -20,7 +22,9 @@ function imageUrlFromTags(tags: Record<string, string> | undefined): string | un
 }
 
 /** Build description from OSM tags (description, note, operator, bottle, etc.). */
-function descriptionFromTags(tags: Record<string, string> | undefined): string | undefined {
+function descriptionFromTags(
+  tags: Record<string, string> | undefined,
+): string | undefined {
   if (!tags) return undefined;
   const parts: string[] = [];
   if (tags.description) parts.push(tags.description);
@@ -41,28 +45,27 @@ type OverpassElement = {
   tags?: Record<string, string>;
 };
 
-function parseOverpassElements(
-  elements: OverpassElement[],
-): Fountain[] {
+function parseOverpassElements(elements: OverpassElement[]): Fountain[] {
   return elements
     .filter((el) => el.lat != null && el.lon != null)
     .map((el) => {
       const tags = el.tags ?? {};
       const imageUrl = imageUrlFromTags(tags);
       const description = descriptionFromTags(tags);
-      const category = tags.operator || (tags.bottle === "yes" ? "Refill" : undefined);
+      const category =
+        tags.operator || (tags.bottle === "yes" ? "Refill" : undefined);
       return {
         id: el.id,
         name: tags.name ?? "Water fountain",
         latitude: el.lat!,
         longitude: el.lon!,
         description: description || undefined,
+        // Keep OSM fountains ultra-lightweight: just a single image URL, no images[] array
         imageUrl: imageUrl || undefined,
-        images: imageUrl ? [imageUrl] : undefined,
         category: category || undefined,
         isOperational: true,
         isFree: true,
-        useAdminPin: true,
+        useAdminPin: false,
       };
     }) as Fountain[];
 }
@@ -78,7 +81,8 @@ async function runOverpassQuery(query: string): Promise<OverpassElement[]> {
   return json.elements ?? [];
 }
 
-const MAX_OVERPASS_ELEMENTS = 2000;
+// Lower cap so we never flood the app with thousands of OSM nodes at once
+const MAX_OVERPASS_ELEMENTS = 800;
 
 /**
  * Fetch drinking water nodes from OpenStreetMap near a point.
