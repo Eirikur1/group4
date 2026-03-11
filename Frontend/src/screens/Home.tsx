@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -6,6 +12,7 @@ import {
   Pressable,
   StyleSheet,
   ScrollView,
+  FlatList,
   Image,
   LayoutAnimation,
   Platform,
@@ -47,7 +54,10 @@ import type { Fountain } from "../types/fountain";
 
 type SheetContent = "list" | "detail" | "profile" | "addSource" | "saved";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -83,9 +93,9 @@ export default function Home() {
   const [selectedFountainSaved, setSelectedFountainSaved] = useState(false);
   const [showOnePlusLottie, setShowOnePlusLottie] = useState(false);
   const [loggingRefill, setLoggingRefill] = useState(false);
-  const onePlusLottieTimeoutRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const onePlusLottieTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const markerPressTimeRef = useRef(0);
   const pendingContentRef = useRef<
     | { type: "detail"; fountain: Fountain }
@@ -115,7 +125,6 @@ export default function Home() {
     })();
   }, []);
 
-
   const regionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -139,7 +148,12 @@ export default function Home() {
   }, []);
 
   const handleMapRegionChange = useCallback(
-    (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => {
+    (region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    }) => {
       const bounds: MapBounds = {
         north: region.latitude + region.latitudeDelta / 2,
         south: region.latitude - region.latitudeDelta / 2,
@@ -175,7 +189,7 @@ export default function Home() {
     } catch (e) {
       Alert.alert(
         "Saved locations unavailable",
-        e instanceof Error ? e.message : "Could not fetch saved locations."
+        e instanceof Error ? e.message : "Could not fetch saved locations.",
       );
       setSavedFountains([]);
     }
@@ -213,14 +227,14 @@ export default function Home() {
         [
           { text: "Cancel", style: "cancel" },
           { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
-        ]
+        ],
       );
       return;
     }
     if (!selectedFountain || typeof selectedFountain.id !== "string") {
       Alert.alert(
         "Not supported",
-        "Only database-backed fountains can be saved right now."
+        "Only database-backed fountains can be saved right now.",
       );
       return;
     }
@@ -233,10 +247,16 @@ export default function Home() {
       setSelectedFountainSaved(previous);
       Alert.alert(
         "Save failed",
-        e instanceof Error ? e.message : "Could not update saved location."
+        e instanceof Error ? e.message : "Could not update saved location.",
       );
     }
-  }, [isSignedIn, selectedFountain, selectedFountainSaved, refetchSavedFountains, navigation]);
+  }, [
+    isSignedIn,
+    selectedFountain,
+    selectedFountainSaved,
+    refetchSavedFountains,
+    navigation,
+  ]);
 
   const [showLeafSavedPopup, setShowLeafSavedPopup] = useState(false);
 
@@ -293,8 +313,18 @@ export default function Home() {
       f.distance = formatDistance(m);
     });
     list.sort((a, b) => {
-      const ma = distanceMeters(userLocation!.latitude, userLocation!.longitude, a.latitude, a.longitude);
-      const mb = distanceMeters(userLocation!.latitude, userLocation!.longitude, b.latitude, b.longitude);
+      const ma = distanceMeters(
+        userLocation!.latitude,
+        userLocation!.longitude,
+        a.latitude,
+        a.longitude,
+      );
+      const mb = distanceMeters(
+        userLocation!.latitude,
+        userLocation!.longitude,
+        b.latitude,
+        b.longitude,
+      );
       return ma - mb;
     });
     return list;
@@ -303,9 +333,7 @@ export default function Home() {
   const searchDropdownFountains = useMemo(() => {
     const q = debouncedSearchQuery.trim().toLowerCase();
     const list = q
-      ? closestFountains.filter((f) =>
-          f.name.toLowerCase().includes(q),
-        )
+      ? closestFountains.filter((f) => f.name.toLowerCase().includes(q))
       : closestFountains;
     return list.slice(0, 5);
   }, [closestFountains, debouncedSearchQuery]);
@@ -376,7 +404,6 @@ export default function Home() {
     [],
   );
 
-
   const handleAddLocationPress = useCallback(() => {
     if (!isSignedIn) {
       Alert.alert(
@@ -385,7 +412,7 @@ export default function Home() {
         [
           { text: "Cancel", style: "cancel" },
           { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
-        ]
+        ],
       );
       return;
     }
@@ -396,14 +423,10 @@ export default function Home() {
 
   const handleAddRefillPress = useCallback(async () => {
     if (!isSignedIn) {
-      Alert.alert(
-        "Sign in required",
-        "You need to log in to log a refill.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
-        ]
-      );
+      Alert.alert("Sign in required", "You need to log in to log a refill.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+      ]);
       return;
     }
     if (!user?.id) return;
@@ -466,28 +489,49 @@ export default function Home() {
     [handleFountainClick],
   );
 
+  const handleDetailFountainUpdate = useCallback((updated: Fountain) => {
+    setSelectedFountain(updated);
+    setUserFountains((prev) =>
+      prev.map((f) => (f.id === updated.id ? updated : f)),
+    );
+  }, []);
+
+  const selectedFountainIdRef = useRef<Fountain["id"] | null>(null);
+  selectedFountainIdRef.current = selectedFountain?.id ?? null;
+  const handleDetailFountainDeleted = useCallback(() => {
+    const id = selectedFountainIdRef.current;
+    if (id == null) return;
+    setUserFountains((prev) => prev.filter((f) => f.id !== id));
+    setSelectedFountain(null);
+    setSheetContent("list");
+  }, []);
+
+  const mapRegion = useMemo(
+    () =>
+      userLocation
+        ? {
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }
+        : undefined,
+    [userLocation?.latitude, userLocation?.longitude],
+  );
+
   return (
     <View style={styles.container}>
       {locationReady && (
-      <Map
-        fountains={userFountains}
-        region={
-          userLocation
-            ? {
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
-              }
-            : undefined
-        }
-        selectedFountain={selectedFountain}
-        pendingAddCoordinate={pendingAddCoordinate}
-        onMapPress={handleMapPress}
-        onLongPress={handleMapLongPress}
-        onRegionChangeComplete={handleMapRegionChange}
-        onFountainPress={handleFountainClick}
-      />
+        <Map
+          fountains={userFountains}
+          region={mapRegion}
+          selectedFountain={selectedFountain}
+          pendingAddCoordinate={pendingAddCoordinate}
+          onMapPress={handleMapPress}
+          onLongPress={handleMapLongPress}
+          onRegionChangeComplete={handleMapRegionChange}
+          onFountainPress={handleFountainClick}
+        />
       )}
 
       <View style={styles.addRefillWrap} pointerEvents="box-none">
@@ -520,9 +564,7 @@ export default function Home() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               onFocus={() => setSearchFocused(true)}
-              onBlur={() =>
-                setTimeout(() => setSearchFocused(false), 200)
-              }
+              onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
             />
           </View>
           {searchFocused && searchDropdownFountains.length > 0 && (
@@ -579,7 +621,9 @@ export default function Home() {
           <Pressable
             style={[
               styles.addLocationButton,
-              isSignedIn && !pendingAddCoordinate && styles.addLocationButtonDisabled,
+              isSignedIn &&
+                !pendingAddCoordinate &&
+                styles.addLocationButtonDisabled,
             ]}
             onPress={handleAddLocationPress}
             disabled={isSignedIn ? !pendingAddCoordinate : false}
@@ -595,7 +639,9 @@ export default function Home() {
               source={require("../../assets/icons/ADd.png")}
               style={[
                 styles.iconImage,
-                isSignedIn && !pendingAddCoordinate && styles.addLocationButtonIconDisabled,
+                isSignedIn &&
+                  !pendingAddCoordinate &&
+                  styles.addLocationButtonIconDisabled,
               ]}
               resizeMode="contain"
             />
@@ -607,127 +653,114 @@ export default function Home() {
         <BottomSheet
           snapPoints={[122, "90%"]}
           index={currentSnap}
-        onSnapChange={handleSheetSnapChange}
-        onBackdropPress={handleBackdropPress}
-        title={
-          sheetContent === "list"
-            ? "Closest Fountains"
-            : sheetContent === "saved"
-              ? "Saved Locations"
-              : undefined
-        }
-        subtitle={
-          sheetContent === "list"
-            ? "Find the closest water fountains"
-            : sheetContent === "saved"
-              ? "Your saved refill stations"
-              : undefined
-        }
-      >
-        {sheetContent === "list" && (
-          <View style={styles.list}>
-            <ScrollView
-              style={styles.listItems}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-            >
-              {closestFountains.length > 0 && (
-                <FeaturedFountainCard
-                  fountain={closestFountains[0]}
-                  onClick={() => handleFountainClick(closestFountains[0])}
-                />
-              )}
-              {closestFountains.slice(1, 20).map((fountain) => (
-                <FountainCard
-                  key={fountain.id}
-                  fountain={fountain}
-                  onClick={() => handleFountainClick(fountain)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-        {sheetContent === "detail" && selectedFountain && (
-          <FountainDetail
-            fountain={selectedFountain}
-            saved={selectedFountainSaved}
-            onToggleSaved={handleToggleSaved}
-            onPhotosAdded={(updated) => {
-              setSelectedFountain(updated);
-              setUserFountains((prev) =>
-                prev.map((f) => (f.id === updated.id ? updated : f))
-              );
-            }}
-            onRatingChanged={(updated) => {
-              setSelectedFountain(updated);
-              setUserFountains((prev) =>
-                prev.map((f) => (f.id === updated.id ? updated : f))
-              );
-            }}
-            onFountainUpdated={(updated) => {
-              setSelectedFountain(updated);
-              setUserFountains((prev) =>
-                prev.map((f) => (f.id === updated.id ? updated : f))
-              );
-            }}
-            onFountainDeleted={() => {
-              if (selectedFountain) {
-                setUserFountains((prev) =>
-                  prev.filter((f) => f.id !== selectedFountain.id)
-                );
-                setSelectedFountain(null);
-                setSheetContent("list");
-              }
-            }}
-            onSavedChanged={refetchSavedFountains}
-          />
-        )}
-        {sheetContent === "saved" && (
-          <View style={styles.list}>
-            <ScrollView
-              style={styles.listItems}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {savedFountains.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No saved locations yet</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Open a fountain and tap the bookmark icon to save it.
-                  </Text>
-                </View>
-              ) : (
-                savedFountains.map((fountain) => (
+          onSnapChange={handleSheetSnapChange}
+          onBackdropPress={handleBackdropPress}
+          title={
+            sheetContent === "list"
+              ? "Closest Fountains"
+              : sheetContent === "saved"
+                ? "Saved Locations"
+                : undefined
+          }
+          subtitle={
+            sheetContent === "list"
+              ? "Find the closest water fountains"
+              : sheetContent === "saved"
+                ? "Your saved refill stations"
+                : undefined
+          }
+        >
+          {sheetContent === "list" && (
+            <View style={styles.list}>
+              <FlatList
+                data={closestFountains}
+                keyExtractor={(f) => String(f.id)}
+                renderItem={({ item: fountain, index }) =>
+                  index === 0 ? (
+                    <FeaturedFountainCard
+                      fountain={fountain}
+                      onPressFountain={handleFountainClick}
+                    />
+                  ) : (
+                    <FountainCard
+                      fountain={fountain}
+                      onPressFountain={handleFountainClick}
+                    />
+                  )
+                }
+                style={styles.listItems}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                initialNumToRender={8}
+                maxToRenderPerBatch={6}
+                windowSize={6}
+                removeClippedSubviews={Platform.OS === "android"}
+              />
+            </View>
+          )}
+          {sheetContent === "detail" && selectedFountain && (
+            <FountainDetail
+              fountain={selectedFountain}
+              saved={selectedFountainSaved}
+              onToggleSaved={handleToggleSaved}
+              onPhotosAdded={handleDetailFountainUpdate}
+              onRatingChanged={handleDetailFountainUpdate}
+              onFountainUpdated={handleDetailFountainUpdate}
+              onFountainDeleted={handleDetailFountainDeleted}
+              onSavedChanged={refetchSavedFountains}
+            />
+          )}
+          {sheetContent === "saved" && (
+            <View style={styles.list}>
+              <FlatList
+                data={savedFountains}
+                keyExtractor={(f) => String(f.id)}
+                renderItem={({ item: fountain }) => (
                   <FountainCard
-                    key={fountain.id}
                     fountain={fountain}
-                    onClick={() => handleFountainClick(fountain)}
+                    onPressFountain={handleFountainClick}
                   />
-                ))
-              )}
-            </ScrollView>
-          </View>
-        )}
-        {sheetContent === "profile" && (
-          <ProfileMenu
-            onOpenSaved={handleOpenSaved}
-            onClose={() => {
-              Keyboard.dismiss();
-              pendingContentRef.current = null;
-              setSheetContent("list");
-              setCurrentSnap(0);
-            }}
-          />
-        )}
-        {sheetContent === "addSource" && pendingAddCoordinate && (
-          <AddWaterSource
-            latitude={pendingAddCoordinate.latitude}
-            longitude={pendingAddCoordinate.longitude}
-            onClose={handleAddSourceClose}
-            onUploadSuccess={handleUploadSuccess}
-          />
-        )}
+                )}
+                style={styles.listItems}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyTitle}>
+                      No saved locations yet
+                    </Text>
+                    <Text style={styles.emptySubtitle}>
+                      Open a fountain and tap the bookmark icon to save it.
+                    </Text>
+                  </View>
+                }
+                initialNumToRender={8}
+                maxToRenderPerBatch={6}
+                windowSize={6}
+                removeClippedSubviews={Platform.OS === "android"}
+              />
+            </View>
+          )}
+          {sheetContent === "profile" && (
+            <ProfileMenu
+              onOpenSaved={handleOpenSaved}
+              onClose={() => {
+                Keyboard.dismiss();
+                pendingContentRef.current = null;
+                setSheetContent("list");
+                setCurrentSnap(0);
+              }}
+            />
+          )}
+          {sheetContent === "addSource" && pendingAddCoordinate && (
+            <AddWaterSource
+              latitude={pendingAddCoordinate.latitude}
+              longitude={pendingAddCoordinate.longitude}
+              onClose={handleAddSourceClose}
+              onUploadSuccess={handleUploadSuccess}
+            />
+          )}
         </BottomSheet>
       </View>
 
@@ -742,7 +775,6 @@ export default function Home() {
           />
         </View>
       )}
-
     </View>
   );
 }

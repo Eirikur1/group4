@@ -1,63 +1,38 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
-import MapView, { Marker } from "react-native-maps";
-import { Ionicons } from "@expo/vector-icons";
+import { View, Text, Pressable, StyleSheet, Image } from "react-native";
 import type { Fountain } from "../types/fountain";
 import StarIcon from "../../assets/icons/Star.svg";
-import { darkMapStyle } from "../constants/mapStyles";
 import { GRID_MARGIN } from "../constants/grid";
-
-const region = (f: Fountain) => ({
-  latitude: f.latitude,
-  longitude: f.longitude,
-  latitudeDelta: 0.006,
-  longitudeDelta: 0.006,
-});
 
 interface FeaturedFountainCardProps {
   fountain: Fountain;
   onClick?: () => void;
+  onPressFountain?: (f: Fountain) => void;
 }
 
 function FeaturedFountainCard({
   fountain,
   onClick,
+  onPressFountain,
 }: FeaturedFountainCardProps) {
+  const handlePress = onClick ?? (onPressFountain ? () => onPressFountain(fountain) : undefined);
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={onClick}
+      onPress={handlePress}
     >
       <View style={styles.mapWrap}>
-        <MapView
-          style={styles.map}
-          initialRegion={region(fountain)}
-          scrollEnabled={false}
-          zoomEnabled={false}
-          pitchEnabled={false}
-          rotateEnabled={false}
-          customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
-          mapType={
-            (Platform.OS === "ios" ? "muted" : undefined) as
-              | "standard"
-              | "satellite"
-              | "hybrid"
-              | undefined
-          }
-        >
-          <Marker
-            coordinate={{
-              latitude: fountain.latitude,
-              longitude: fountain.longitude,
-            }}
-            image={
+        <View style={styles.map}>
+          <Image
+            source={
               fountain.useAdminPin
                 ? require("../../assets/icons/AdminPin.png")
                 : require("../../assets/icons/PinIcon.png")
             }
-            anchor={{ x: 0.5, y: 1 }}
+            style={styles.featuredPin}
+            resizeMode="contain"
           />
-        </MapView>
+        </View>
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>
@@ -99,7 +74,14 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 12,
     overflow: "hidden",
   },
-  map: { width: "100%", height: "100%" },
+  map: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#E8F4F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  featuredPin: { width: 32, height: 32 },
   body: { padding: GRID_MARGIN },
   title: {
     fontSize: 18,
