@@ -2,6 +2,7 @@ export { default as AddWaterSource } from './AddWaterSource';
 export { default as BackHeader } from './BackHeader';
 export { default as BottomSheet } from './BottomSheet';
 export { default as FormInput } from './FormInput';
+export { default as ClosestFountainRow } from './ClosestFountainRow';
 export { default as FeaturedFountainCard } from './FeaturedFountainCard';
 export { default as FountainCard } from './FountainCard';
 export { default as FountainDetail } from './FountainDetail';
