@@ -48,8 +48,6 @@ const styles = StyleSheet.create({
   iconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
     justifyContent: "center",
     marginRight: GRID_GUTTER_HALF + 4,

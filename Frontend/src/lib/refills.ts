@@ -1,5 +1,47 @@
 import { supabase } from "./supabase";
 
+export interface LeaderboardEntry {
+  userId: string;
+  refillCount: number;
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
+export type LeaderboardResult =
+  | { data: LeaderboardEntry[]; error: null }
+  | { data: []; error: string };
+
+/**
+ * Get top users by refill count. Requires Supabase migration 004_refill_leaderboard
+ * (run the SQL in that file in Dashboard → SQL Editor).
+ */
+export async function getRefillLeaderboard(
+  limit = 10
+): Promise<LeaderboardResult> {
+  if (!supabase) return { data: [], error: "Supabase not configured" };
+  const { data, error } = await supabase.rpc("get_refill_leaderboard", {
+    limit_count: Math.min(Math.max(1, limit), 50),
+  });
+  if (error) {
+    return { data: [], error: error.message };
+  }
+  const rows = (data ?? []) as Array<{
+    user_id: string;
+    refill_count: number | string;
+    display_name: string | null;
+    avatar_url: string | null;
+  }>;
+  return {
+    data: rows.map((r) => ({
+      userId: r.user_id,
+      refillCount: Number(r.refill_count),
+      displayName: r.display_name,
+      avatarUrl: r.avatar_url,
+    })),
+    error: null,
+  };
+}
+
 /**
  * Get the total number of refills logged by the user.
  */

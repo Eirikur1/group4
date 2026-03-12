@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Image,
+  Alert,
+  ActivityIndicator,
+  FlatList,
+  type ListRenderItem,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -10,7 +20,7 @@ import { GRID_MARGIN, GRID_GUTTER_HALF } from "../constants/grid";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabase";
 import { getMyProfile, uploadAvatar } from "../lib/profile";
-import { getRefillCount, logRefill } from "../lib/refills";
+import { getRefillCount, getRefillLeaderboard, type LeaderboardEntry } from "../lib/refills";
 import HeartLogo from "../../assets/icons/HeartLogo.svg";
 
 interface ProfileMenuProps {
@@ -26,7 +36,10 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refillCount, setRefillCount] = useState<number>(0);
-  const [loggingRefill, setLoggingRefill] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [leaderboardExpanded, setLeaderboardExpanded] = useState(false);
 
   useEffect(() => {
     if (!user?.id) {
@@ -55,16 +68,33 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
     };
   }, [user?.id]);
 
-  const handleLogRefill = async () => {
-    if (!user?.id || loggingRefill) return;
-    setLoggingRefill(true);
-    try {
-      const ok = await logRefill(user.id, null);
-      if (ok) setRefillCount((c) => c + 1);
-    } finally {
-      setLoggingRefill(false);
+  useEffect(() => {
+    if (!isSignedIn) {
+      setLeaderboard([]);
+      setLeaderboardError(null);
+      return;
     }
-  };
+    let cancelled = false;
+    setLeaderboardLoading(true);
+    setLeaderboardError(null);
+    getRefillLeaderboard(15)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.error) {
+          setLeaderboardError(result.error);
+          setLeaderboard([]);
+        } else {
+          setLeaderboard(result.data);
+          setLeaderboardError(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLeaderboardLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn]);
 
   const handleAvatarPress = async () => {
     if (!user?.id || uploadingAvatar) return;
@@ -104,6 +134,25 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
     onClose?.();
   };
 
+  const renderLeaderboardRow: ListRenderItem<LeaderboardEntry> = ({ item, index }) => (
+    <View style={styles.leaderboardRow}>
+      <Text style={styles.leaderboardRank}>#{index + 1}</Text>
+      <View style={styles.leaderboardAvatarWrap}>
+        {item.avatarUrl ? (
+          <Image source={{ uri: item.avatarUrl }} style={styles.leaderboardAvatar} resizeMode="cover" />
+        ) : (
+          <View style={[styles.leaderboardAvatar, styles.leaderboardAvatarPlaceholder]}>
+            <Ionicons name="person" size={16} color="#999" />
+          </View>
+        )}
+      </View>
+      <Text style={styles.leaderboardName} numberOfLines={1}>
+        {item.displayName || "Refiller"}
+      </Text>
+      <Text style={styles.leaderboardCount}>{item.refillCount}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -141,22 +190,63 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
         </View>
       </View>
 
+      <View style={styles.leaderboardSection}>
+        <Text style={styles.leaderboardTitle}>Top refills</Text>
+        {!isSignedIn ? (
+          <Text style={styles.leaderboardHint}>Sign in to see the leaderboard</Text>
+        ) : leaderboardLoading ? (
+          <ActivityIndicator size="small" color="#666" style={styles.leaderboardLoader} />
+        ) : leaderboardError ? (
+          <Text style={styles.leaderboardError}>
+            Couldn't load leaderboard. Run the SQL in{" "}
+            <Text style={styles.leaderboardErrorBold}>supabase/migrations/004_refill_leaderboard.sql</Text>{" "}
+            in your Supabase project (Dashboard → SQL Editor).
+          </Text>
+        ) : leaderboard.length === 0 ? (
+          <Text style={styles.leaderboardHint}>No refills yet. Tap the refill button on the map at a station to log refills.</Text>
+        ) : (
+          <>
+            <FlatList
+              data={
+                leaderboardExpanded ? leaderboard : leaderboard.slice(0, 5)
+              }
+              keyExtractor={(item) => item.userId}
+              scrollEnabled={false}
+              renderItem={renderLeaderboardRow}
+              listKey="leaderboard"
+            />
+            {leaderboard.length > 5 ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.leaderboardShowMore,
+                  pressed && styles.leaderboardShowMorePressed,
+                ]}
+                onPress={() => setLeaderboardExpanded((prev) => !prev)}
+                accessibilityLabel={leaderboardExpanded ? "Show less" : "Show more"}
+                accessibilityRole="button"
+              >
+                <Text style={styles.leaderboardShowMoreText}>
+                  {leaderboardExpanded ? "Show less" : "Show more"}
+                </Text>
+                <Ionicons
+                  name={leaderboardExpanded ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#3A9BDC"
+                />
+              </Pressable>
+            ) : null}
+          </>
+        )}
+      </View>
+
       <View style={styles.menu}>
         {isSignedIn && (
-          <>
-            <MenuItem
-              icon={<Ionicons name="add-circle-outline" size={20} color="#333" />}
-              title="Log a refill"
-              subtitle="Count a refill (e.g. if you didn’t tap at the station)"
-              onClick={handleLogRefill}
-            />
-            <MenuItem
-              icon={<HeartLogo width={20} height={20 * (23 / 25)} color="#333" />}
-              title="Saved"
-              subtitle="Find Saved Locations"
-              onClick={() => onOpenSaved?.()}
-            />
-          </>
+          <MenuItem
+            icon={<HeartLogo width={20} height={20 * (23 / 25)} color="#333" />}
+            title="Saved"
+            subtitle="Find Saved Locations"
+            onClick={() => onOpenSaved?.()}
+          />
         )}
         <MenuItem
           icon={<Ionicons name="settings" size={20} color="#333" />}
@@ -200,5 +290,83 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   userName: { fontSize: 18, fontWeight: "600", color: "#000" },
   stats: { fontSize: 14, color: "#666", marginTop: 2 },
+  leaderboardSection: {
+    paddingVertical: GRID_MARGIN,
+    paddingHorizontal: GRID_MARGIN,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  leaderboardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#000",
+    marginBottom: GRID_GUTTER_HALF,
+  },
+  leaderboardHint: {
+    fontSize: 14,
+    color: "#666",
+  },
+  leaderboardError: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 20,
+  },
+  leaderboardErrorBold: {
+    fontWeight: "600",
+    color: "#333",
+  },
+  leaderboardLoader: { marginVertical: 8 },
+  leaderboardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+  },
+  leaderboardRank: {
+    width: 28,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  leaderboardAvatarWrap: {
+    marginRight: 10,
+  },
+  leaderboardAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  leaderboardAvatarPlaceholder: {
+    backgroundColor: "#e8e8e8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leaderboardName: {
+    flex: 1,
+    fontSize: 15,
+    color: "#000",
+  },
+  leaderboardCount: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#333",
+  },
+   leaderboardShowMore: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  leaderboardShowMorePressed: {
+    opacity: 0.7,
+  },
+  leaderboardShowMoreText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3A9BDC",
+  },
   menu: { paddingTop: GRID_GUTTER_HALF },
 });
