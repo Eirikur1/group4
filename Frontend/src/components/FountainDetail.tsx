@@ -161,7 +161,7 @@ function FountainDetail({
   const navigation = useNavigation<NavProp>();
   const { isSignedIn, user, session } = useAuth();
   const [resolvedFountain, setResolvedFountain] = useState<Fountain | null>(
-    null,
+    typeof fountain.id === "string" ? fountain : null,
   );
   const isOsm = typeof fountain.id === "number";
   const effectiveFountain =
@@ -191,6 +191,12 @@ function FountainDetail({
     fountain.latitude,
     fountain.longitude,
   ]);
+
+  // Keep resolvedFountain in sync when the parent passes an updated Supabase fountain
+  useEffect(() => {
+    if (typeof fountain.id !== "string") return;
+    setResolvedFountain(fountain);
+  }, [fountain]);
 
   const urls: string[] =
     (effectiveFountain.images?.length ?? 0) > 0
