@@ -1,6 +1,8 @@
+import type { MapTimeOfDay } from "../lib/appSettings";
+
 /**
  * Dark map style (Google Maps format).
- * Used on Android; on iOS with Apple Maps this is ignored (use mapType for a different look).
+ * Used on Android for night mode; on iOS Apple Maps uses mapType + userInterfaceStyle.
  */
 export const darkMapStyle = [
   { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
@@ -28,3 +30,29 @@ export const darkMapStyle = [
   { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
 ];
+
+type MapStyleArray = typeof darkMapStyle;
+
+export interface MapStyleConfig {
+  /** iOS: "standard" | "mutedStandard"; Android: ignored when using customMapStyle */
+  mapType: "standard" | "mutedStandard" | "satellite" | "hybrid";
+  /** iOS: "light" | "dark" for map tint */
+  userInterfaceStyle: "light" | "dark";
+  /** Android: custom JSON style; undefined = default light */
+  customMapStyle: MapStyleArray | undefined;
+}
+
+export function getMapStyleForTime(time: MapTimeOfDay): MapStyleConfig {
+  if (time === "night") {
+    return {
+      mapType: "mutedStandard",
+      userInterfaceStyle: "dark",
+      customMapStyle: darkMapStyle,
+    };
+  }
+  return {
+    mapType: "mutedStandard",
+    userInterfaceStyle: "light",
+    customMapStyle: undefined,
+  };
+}

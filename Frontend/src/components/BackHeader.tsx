@@ -21,10 +21,10 @@ export default function BackHeader({
   const navigation = useNavigation<NavProp>();
 
   const handleBack = () => {
-    if (backTo) {
-      navigation.navigate(backTo);
-    } else {
+    if (navigation.canGoBack()) {
       navigation.goBack();
+    } else if (backTo) {
+      navigation.navigate(backTo);
     }
   };
 

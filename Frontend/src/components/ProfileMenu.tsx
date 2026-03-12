@@ -18,6 +18,7 @@ import MenuItem from "./MenuItem";
 import { Ionicons } from "@expo/vector-icons";
 import { GRID_MARGIN, GRID_GUTTER_HALF } from "../constants/grid";
 import { useAuth } from "../contexts/AuthContext";
+import { useTranslation } from "../i18n/useTranslation";
 import { supabase } from "../lib/supabase";
 import { getMyProfile, uploadAvatar } from "../lib/profile";
 import { getRefillCount, getRefillLeaderboard, type LeaderboardEntry } from "../lib/refills";
@@ -33,6 +34,7 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) {
   const navigation = useNavigation<NavProp>();
   const { isSignedIn, user } = useAuth();
+  const { t } = useTranslation();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refillCount, setRefillCount] = useState<number>(0);
@@ -100,7 +102,7 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
     if (!user?.id || uploadingAvatar) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission needed", "Allow access to your photos to set a profile picture.");
+      Alert.alert(t("permissionNeeded"), t("allowPhotosForAvatar"));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -116,8 +118,8 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
       setAvatarUrl(url);
     } catch (e) {
       Alert.alert(
-        "Upload failed",
-        e instanceof Error ? e.message : "Could not update profile picture."
+        t("uploadFailed"),
+        e instanceof Error ? e.message : t("couldNotUpdateProfilePicture")
       );
     } finally {
       setUploadingAvatar(false);
@@ -213,7 +215,6 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
               keyExtractor={(item) => item.userId}
               scrollEnabled={false}
               renderItem={renderLeaderboardRow}
-              listKey="leaderboard"
             />
             {leaderboard.length > 5 ? (
               <Pressable
@@ -243,15 +244,15 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
         {isSignedIn && (
           <MenuItem
             icon={<HeartLogo width={20} height={20 * (23 / 25)} color="#333" />}
-            title="Saved"
-            subtitle="Find Saved Locations"
+            title={t("saved")}
+            subtitle={t("savedSubtitle")}
             onClick={() => onOpenSaved?.()}
           />
         )}
         <MenuItem
           icon={<Ionicons name="settings" size={20} color="#333" />}
-          title="Settings"
-          onClick={() => {}}
+          title={t("settings")}
+          onClick={() => navigation.navigate("Settings")}
         />
         <MenuItem
           icon={
@@ -261,7 +262,7 @@ export default function ProfileMenu({ onClose, onOpenSaved }: ProfileMenuProps) 
               color="#333"
             />
           }
-          title={isSignedIn ? "Sign Out" : "Sign In"}
+          title={isSignedIn ? t("signOut") : t("signIn")}
           onClick={isSignedIn ? handleSignOutClick : handleSignInClick}
         />
       </View>
