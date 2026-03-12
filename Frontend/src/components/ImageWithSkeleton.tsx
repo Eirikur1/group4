@@ -17,6 +17,8 @@ interface ImageWithSkeletonProps {
   skeletonBorderRadius?: number;
 }
 
+const MIN_SKELETON_MS = 400;
+
 function ImageWithSkeleton({
   uri,
   containerStyle,
@@ -25,7 +27,13 @@ function ImageWithSkeleton({
   skeletonBorderRadius = 8,
 }: ImageWithSkeletonProps) {
   const [loaded, setLoaded] = useState(false);
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
   const pulse = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinTimeElapsed(true), MIN_SKELETON_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (loaded) return;
@@ -47,9 +55,11 @@ function ImageWithSkeleton({
     return () => anim.stop();
   }, [loaded, pulse]);
 
+  const showSkeleton = !loaded || !minTimeElapsed;
+
   return (
     <View style={[styles.container, containerStyle]}>
-      {!loaded && (
+      {showSkeleton && (
         <Animated.View
           style={[
             StyleSheet.absoluteFillObject,
@@ -63,7 +73,7 @@ function ImageWithSkeleton({
         style={[
           StyleSheet.absoluteFillObject,
           imageStyle,
-          !loaded && styles.imageHidden,
+          showSkeleton && styles.imageHidden,
         ]}
         resizeMode={resizeMode}
         onLoad={() => setLoaded(true)}

@@ -18,6 +18,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  Animated,
 } from "react-native";
 import LottieView from "lottie-react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -98,6 +99,53 @@ function PhotoTile({
   );
 }
 
+function UploadSkeletonTile({
+  width,
+  marginRight,
+}: {
+  width: number;
+  marginRight: number;
+}) {
+  const pulse = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.5,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  return (
+    <View
+      style={[
+        styles.carouselImage,
+        styles.uploadSkeletonTile,
+        { width, marginRight },
+      ]}
+    >
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFillObject,
+          styles.uploadSkeleton,
+          { opacity: pulse },
+        ]}
+      />
+    </View>
+  );
+}
+
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 function FountainDetail({
@@ -113,10 +161,11 @@ function FountainDetail({
   const navigation = useNavigation<NavProp>();
   const { isSignedIn, user, session } = useAuth();
   const [resolvedFountain, setResolvedFountain] = useState<Fountain | null>(
-    typeof fountain.id === "string" ? fountain : null,
+    null,
   );
   const isOsm = typeof fountain.id === "number";
-  const effectiveFountain = resolvedFountain ?? fountain;
+  const effectiveFountain =
+    isOsm && resolvedFountain ? resolvedFountain : fountain;
 
   useEffect(() => {
     if (!isOsm || typeof fountain.id !== "number") return;
@@ -152,6 +201,7 @@ function FountainDetail({
 
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [addingPhoto, setAddingPhoto] = useState(false);
+  const [pendingUploadCount, setPendingUploadCount] = useState(0);
   const [resolving, setResolving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -250,6 +300,7 @@ function FountainDetail({
     async (uris: string[]) => {
       if (!uris.length || !onPhotosAdded) return;
       setAddingPhoto(true);
+      setPendingUploadCount(uris.length);
       let resolvedId =
         typeof effectiveFountain.id === "string" ? effectiveFountain.id : null;
       if (!resolvedId) {
@@ -288,6 +339,7 @@ function FountainDetail({
         );
       } finally {
         setAddingPhoto(false);
+        setPendingUploadCount(0);
       }
     },
     [
@@ -607,7 +659,7 @@ function FountainDetail({
                 )}
               </View>
             </View>
-            {/* Image carousel — last tile is the add-photo button when allowed */}
+            {/* Image carousel — skeleton placeholders until images load; last tile is add-photo when allowed */}
             {(urls.length > 0 || canAddPhotos) && (
               <View style={styles.imageBlock}>
                 <ScrollView
@@ -624,6 +676,12 @@ function FountainDetail({
                     setCarouselIndex(idx);
                   }}
                 >
+                  {urls.length === 0 && canAddPhotos ? (
+                    <UploadSkeletonTile
+                      width={ITEM_W}
+                      marginRight={IMG_GAP}
+                    />
+                  ) : null}
                   {urls.map((uri, i) => (
                     <PhotoTile
                       key={`${uri}-${i}`}
@@ -636,6 +694,14 @@ function FountainDetail({
                       }
                     />
                   ))}
+                  {pendingUploadCount > 0 &&
+                    Array.from({ length: pendingUploadCount }).map((_, i) => (
+                      <UploadSkeletonTile
+                        key={`pending-${i}`}
+                        width={ITEM_W}
+                        marginRight={canAddPhotos ? IMG_GAP : 0}
+                      />
+                    ))}
                   {canAddPhotos && (
                     <Pressable
                       // marginRight = ITEM_W/2 extends content so max scroll == finalSnap.
@@ -980,6 +1046,12 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 10,
     overflow: "hidden",
+  },
+  uploadSkeletonTile: {
+    backgroundColor: "#E8E8E8",
+  },
+  uploadSkeleton: {
+    backgroundColor: "#E0E0E0",
   },
   dotsRow: {
     flexDirection: "row",

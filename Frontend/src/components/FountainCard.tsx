@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
 import { GRID_GUTTER_HALF } from "../constants/grid";
 import StarIcon from "../../assets/icons/Star.svg";
+import ImageWithSkeleton from "./ImageWithSkeleton";
 
 interface FountainCardProps {
   fountain: Fountain;
@@ -20,11 +21,21 @@ function FountainCard({ fountain, onClick, onPressFountain }: FountainCardProps)
     >
       <View style={styles.thumbWrap}>
         <View style={styles.thumbBackground}>
-          <Image
-            source={require("../../assets/icons/PinIcon.png")}
-            style={styles.thumbPin}
-            resizeMode="contain"
-          />
+          {fountain.imageUrl ? (
+            <ImageWithSkeleton
+              uri={fountain.imageUrl}
+              containerStyle={StyleSheet.absoluteFillObject}
+              imageStyle={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+              skeletonBorderRadius={10}
+            />
+          ) : (
+            <Image
+              source={require("../../assets/icons/PinIcon.png")}
+              style={styles.thumbPin}
+              resizeMode="contain"
+            />
+          )}
         </View>
       </View>
       <View style={styles.content}>
