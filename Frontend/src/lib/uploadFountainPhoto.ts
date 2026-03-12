@@ -18,11 +18,21 @@ export async function uploadFountainPhoto(localUri: string): Promise<string> {
     );
   }
 
-  // Convert to JPEG and get base64 in one step — handles HEIC, PNG, etc.
+  // Downscale + convert to JPEG and get base64 in one step — handles HEIC, PNG, etc.
   const result = await ImageManipulator.manipulateAsync(
     localUri,
-    [],
-    { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+    [
+      {
+        resize: {
+          width: 1200,
+        },
+      },
+    ],
+    {
+      compress: 0.75,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    },
   );
 
   const base64Data = result.base64;
@@ -60,13 +70,30 @@ export async function uploadFountainPhoto(localUri: string): Promise<string> {
 
 /**
  * Upload multiple images and return their public URLs in order.
- * Uploads sequentially to avoid holding multiple large base64 buffers in memory
- * simultaneously, which can crash the app on low-end devices.
+ *
+ * Uses small-batch parallelism (up to 3 at a time) so uploading several photos
+ * feels much faster, while still avoiding too many large base64 buffers in
+ * memory on low-end devices.
  */
 export async function uploadFountainPhotos(localUris: string[]): Promise<string[]> {
-  const urls: string[] = [];
-  for (const uri of localUris) {
-    urls.push(await uploadFountainPhoto(uri));
+  if (localUris.length === 0) return [];
+
+  const urls: string[] = new Array(localUris.length);
+  const concurrency = Math.min(3, localUris.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const current = nextIndex;
+      if (current >= localUris.length) break;
+      nextIndex += 1;
+      urls[current] = await uploadFountainPhoto(localUris[current]);
+    }
   }
+
+  const workers = Array.from({ length: concurrency }, () => worker());
+  await Promise.all(workers);
+
   return urls;
 }

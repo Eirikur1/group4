@@ -52,6 +52,7 @@ import {
 } from "../lib/savedLocations";
 import { logRefill } from "../lib/refills";
 import type { Fountain } from "../types/fountain";
+import { loadCachedFountains, saveCachedFountains } from "../lib/fountainCache";
 
 type SheetContent = "list" | "detail" | "profile" | "addSource" | "saved";
 
@@ -78,6 +79,8 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
+  const [isFetchingBounds, setIsFetchingBounds] = useState(false);
+  const [currentBounds, setCurrentBounds] = useState<MapBounds | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
@@ -133,6 +136,19 @@ export default function Home() {
 
   const regionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Hydrate from persistent cache so fountains appear instantly on reopen
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cached = await loadCachedFountains();
+      if (cancelled || !cached || !cached.fountains.length) return;
+      setUserFountains(cached.fountains);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     return () => {
       if (onePlusLottieTimeoutRef.current) {
@@ -144,14 +160,25 @@ export default function Home() {
     };
   }, []);
 
-  const fetchForBounds = useCallback(async (bounds: MapBounds) => {
-    try {
-      const list = await fetchFountainsInBoundsCached(bounds);
-      setUserFountains(list);
-    } catch {
-      // keep existing markers on error
-    }
-  }, []);
+  const fetchForBounds = useCallback(
+    async (bounds: MapBounds) => {
+      setIsFetchingBounds(true);
+      setCurrentBounds(bounds);
+      try {
+        const list = await fetchFountainsInBoundsCached(bounds);
+        setUserFountains(list);
+        // Persist cache in the background so next launch can show pins immediately
+        saveCachedFountains(list, bounds).catch(() => {
+          // ignore cache write errors
+        });
+      } catch {
+        // keep existing markers on error
+      } finally {
+        setIsFetchingBounds(false);
+      }
+    },
+    [],
+  );
 
   const handleMapRegionChange = useCallback(
     (region: {
@@ -187,6 +214,18 @@ export default function Home() {
       await fetchForBounds(bounds);
     }
   }, [userLocation, fetchForBounds]);
+
+  // Prefetch fountains once we know the user's location, so data is ready as soon as the map is visible
+  useEffect(() => {
+    if (!userLocation) return;
+    const bounds: MapBounds = {
+      north: userLocation.latitude + 0.02,
+      south: userLocation.latitude - 0.02,
+      east: userLocation.longitude + 0.02,
+      west: userLocation.longitude - 0.02,
+    };
+    fetchForBounds(bounds);
+  }, [userLocation?.latitude, userLocation?.longitude, fetchForBounds]);
 
   const refetchSavedFountains = useCallback(async () => {
     try {
@@ -715,24 +754,32 @@ export default function Home() {
         >
           {sheetContent === "list" && (
             <View style={styles.list}>
-              <FlatList
-                data={closestFountains}
-                keyExtractor={(f) => String(f.id)}
-                renderItem={({ item: fountain }) => (
-                  <ClosestFountainRow
-                    fountain={fountain}
-                    onPressFountain={handleFountainClick}
-                  />
-                )}
-                style={styles.listItems}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                initialNumToRender={6}
-                maxToRenderPerBatch={4}
-                windowSize={5}
-                removeClippedSubviews={true}
-              />
+              {isFetchingBounds && closestFountains.length === 0 ? (
+                <View style={styles.skeletonList}>
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <View key={index} style={styles.skeletonRow} />
+                  ))}
+                </View>
+              ) : (
+                <FlatList
+                  data={closestFountains}
+                  keyExtractor={(f) => String(f.id)}
+                  renderItem={({ item: fountain }) => (
+                    <ClosestFountainRow
+                      fountain={fountain}
+                      onPressFountain={handleFountainClick}
+                    />
+                  )}
+                  style={styles.listItems}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  initialNumToRender={6}
+                  maxToRenderPerBatch={4}
+                  windowSize={5}
+                  removeClippedSubviews={true}
+                />
+              )}
             </View>
           )}
           {sheetContent === "detail" && selectedFountain && (
@@ -983,6 +1030,18 @@ const styles = StyleSheet.create({
   iconImage: { width: 22, height: 22 },
   list: { flex: 1, minHeight: 200 },
   listItems: { flex: 1 },
+  skeletonList: {
+    flex: 1,
+    paddingHorizontal: GRID_MARGIN,
+    paddingTop: GRID_GUTTER,
+    paddingBottom: GRID_GUTTER,
+    gap: GRID_GUTTER_HALF,
+  },
+  skeletonRow: {
+    height: 72,
+    borderRadius: 18,
+    backgroundColor: "#F2F2F2",
+  },
   emptyState: {
     paddingTop: 24,
     paddingHorizontal: GRID_MARGIN,
