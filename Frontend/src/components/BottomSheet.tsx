@@ -23,13 +23,18 @@ interface BottomSheetProps {
   /** Shown in the drag handle area at the top so the sheet slides up/down from here */
   title?: string;
   subtitle?: string;
+  /** Min distance from top of screen; sheet height is clamped so it never goes above this (e.g. below search bar) */
+  topInset?: number;
 }
 
-function parseSnapPoint(snap: string | number): number {
-  if (typeof snap === "number") return snap;
-  const pct = parseFloat(snap);
-  if (snap.endsWith("%")) return (pct / 100) * SCREEN_HEIGHT;
-  return pct;
+function parseSnapPoint(snap: string | number, maxHeight: number): number {
+  let value: number;
+  if (typeof snap === "number") value = snap;
+  else {
+    const pct = parseFloat(snap);
+    value = snap.endsWith("%") ? (pct / 100) * SCREEN_HEIGHT : pct;
+  }
+  return Math.min(value, maxHeight);
 }
 
 const ANIM_DURATION = 180;
@@ -42,8 +47,13 @@ export default function BottomSheet({
   onBackdropPress,
   title,
   subtitle,
+  topInset,
 }: BottomSheetProps) {
-  const heights = snapPoints.map(parseSnapPoint);
+  const maxHeight =
+    topInset != null
+      ? SCREEN_HEIGHT - topInset - GRID_MARGIN
+      : SCREEN_HEIGHT;
+  const heights = snapPoints.map((snap) => parseSnapPoint(snap, maxHeight));
   const initialHeight = heights[Math.min(index, heights.length - 1)];
   const animValue = useRef(new Animated.Value(initialHeight)).current;
   const currentIndexRef = useRef(index);

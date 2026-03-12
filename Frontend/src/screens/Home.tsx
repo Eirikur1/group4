@@ -22,7 +22,7 @@ import {
 } from "react-native";
 import RefillOvalIcon from "../../assets/icons/RefillOval.svg";
 import LottieView from "lottie-react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -66,6 +66,7 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function Home() {
   const navigation = useNavigation<NavProp>();
+  const insets = useSafeAreaInsets();
   const { isSignedIn, user } = useAuth();
   const [userFountains, setUserFountains] = useState<Fountain[]>([]);
   const [savedFountains, setSavedFountains] = useState<Fountain[]>([]);
@@ -552,6 +553,11 @@ export default function Home() {
     [userLocation?.latitude, userLocation?.longitude],
   );
 
+  const sheetTopInset = useMemo(
+    () => Math.max(56, insets.top + GRID_GUTTER_HALF + 40 + 8),
+    [insets.top],
+  );
+
   return (
     <View style={styles.container}>
       {locationReady && (
@@ -691,6 +697,7 @@ export default function Home() {
           index={currentSnap}
           onSnapChange={handleSheetSnapChange}
           onBackdropPress={handleBackdropPress}
+          topInset={sheetTopInset}
           title={
             sheetContent === "list"
               ? "Closest Fountains"
