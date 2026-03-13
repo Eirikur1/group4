@@ -39,7 +39,7 @@ import {
 } from "../lib/waterSources";
 import { resolveOsmToUuid } from "../lib/osmResolution";
 import { isLocationSaved, toggleSavedLocation } from "../lib/savedLocations";
-import { submitRating } from "../lib/ratings";
+import { submitRating, getAverageRating } from "../lib/ratings";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import SavedIcon from "./SavedIcon";
@@ -468,10 +468,13 @@ function FountainDetail({
       }
       const previousRating = effectiveFountain.rating;
       const submittedRating = Math.round(rating);
-      onRatingChanged?.({ ...fountain, rating: submittedRating });
       try {
         await submitRating(resolvedRatingId, submittedRating);
-        onRatingChanged?.({ ...fountain, rating: submittedRating });
+        const newAverage = await getAverageRating(resolvedRatingId);
+        onRatingChanged?.({
+          ...fountain,
+          rating: newAverage ?? submittedRating,
+        });
       } catch (e) {
         onRatingChanged?.({ ...fountain, rating: previousRating });
         Alert.alert(

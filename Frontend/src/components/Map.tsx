@@ -4,8 +4,10 @@ import MapView from "react-native-map-clustering";
 import { Marker } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
 import type { Fountain } from "../types/fountain";
-import { darkMapStyle } from "../constants/mapStyles";
+import { getMapStyleForTime } from "../constants/mapStyles";
 import { GRID_MARGIN } from "../constants/grid";
+import { useAppSettings } from "../contexts/AppSettingsContext";
+import { useTranslation } from "../i18n/useTranslation";
 
 const DEFAULT_REGION = {
   latitude: 28.1235,
@@ -85,6 +87,9 @@ function Map({
   onFountainPress,
 }: MapProps) {
   const mapRef = useRef<any>(null);
+  const { mapTimeOfDay } = useAppSettings();
+  const { t } = useTranslation();
+  const mapStyle = useMemo(() => getMapStyleForTime(mapTimeOfDay), [mapTimeOfDay]);
   const setMapRef = useCallback((ref: any) => {
     mapRef.current = ref;
   }, []);
@@ -200,9 +205,9 @@ function Map({
         showsMyLocationButton={false}
         compassOffset={Platform.OS === "ios" ? { x: 12, y: 155 } : undefined}
         showsPointsOfInterest={false}
-        customMapStyle={Platform.OS === "android" ? darkMapStyle : undefined}
-        mapType={(Platform.OS === "ios" ? "mutedStandard" : "standard") as any}
-        userInterfaceStyle={Platform.OS === "ios" ? "dark" : undefined}
+        customMapStyle={Platform.OS === "android" ? (mapStyle.customMapStyle ?? undefined) as any : undefined}
+        mapType={mapStyle.mapType as any}
+        userInterfaceStyle={Platform.OS === "ios" ? mapStyle.userInterfaceStyle : undefined}
         clusteringEnabled
         clusterColor="#FF7A50"
         clusterTextColor="#FFFFFF"
@@ -234,7 +239,9 @@ function Map({
             anchor={{ x: 0.5, y: 1 }}
             tracksViewChanges={false}
             image={
-              fountain.isOperational ? require("../../assets/icons/PinIcon.png") : require("../../assets/icons/AdminPin.png")
+              fountain.isOperational
+                ? require("../../assets/icons/PinIcon.png")
+                : require("../../assets/icons/AdminPin.png")
             }
             onPress={() => onFountainPress?.(fountain)}
           />
@@ -248,7 +255,7 @@ function Map({
               pressed && styles.myLocationButtonPressed,
             ]}
             onPress={handleMyLocationPress}
-            accessibilityLabel="Center on my location"
+            accessibilityLabel={t("centerOnMyLocation")}
             accessibilityRole="button"
           >
             <Ionicons name="locate" size={22} color="#333333" />

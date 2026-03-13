@@ -65,7 +65,7 @@ export default function SignIn() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <BackHeader title="Sign In" backTo="Home" />
       <ScrollView
         style={styles.scroll}
@@ -147,9 +147,17 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 14, color: "#666" },
   link: { fontSize: 14, color: "#2196F3", fontWeight: "600" },
-  divider: { flexDirection: "row", alignItems: "center", marginVertical: GRID_GUTTER },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: GRID_GUTTER,
+  },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#ddd" },
-  dividerText: { marginHorizontal: GRID_GUTTER_HALF + 4, fontSize: 14, color: "#999" },
+  dividerText: {
+    marginHorizontal: GRID_GUTTER_HALF + 4,
+    fontSize: 14,
+    color: "#999",
+  },
   errorBox: {
     backgroundColor: "#ffebee",
     padding: GRID_GUTTER_HALF + 4,

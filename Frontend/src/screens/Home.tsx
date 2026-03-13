@@ -22,7 +22,10 @@ import {
 } from "react-native";
 import RefillOvalIcon from "../../assets/icons/RefillOval.svg";
 import LottieView from "lottie-react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -53,6 +56,7 @@ import {
 import { logRefill } from "../lib/refills";
 import type { Fountain } from "../types/fountain";
 import { loadCachedFountains, saveCachedFountains } from "../lib/fountainCache";
+import { useTranslation } from "../i18n/useTranslation";
 
 type SheetContent = "list" | "detail" | "profile" | "addSource" | "saved";
 
@@ -69,6 +73,7 @@ export default function Home() {
   const navigation = useNavigation<NavProp>();
   const insets = useSafeAreaInsets();
   const { isSignedIn, user } = useAuth();
+  const { t } = useTranslation();
   const [userFountains, setUserFountains] = useState<Fountain[]>([]);
   const [savedFountains, setSavedFountains] = useState<Fountain[]>([]);
   const [userLocation, setUserLocation] = useState<{
@@ -99,6 +104,28 @@ export default function Home() {
   const [showOnePlusLottie, setShowOnePlusLottie] = useState(false);
   const [showRefillProfileBadge, setShowRefillProfileBadge] = useState(false);
   const [loggingRefill, setLoggingRefill] = useState(false);
+  const [refillPressesUsed, setRefillPressesUsed] = useState(0);
+  const [refillCooldownEndsAt, setRefillCooldownEndsAt] = useState<number | null>(
+    null,
+  );
+
+  const REFILL_LIMIT = 2;
+  const REFILL_COOLDOWN_MS = 60 * 1000;
+
+  useEffect(() => {
+    if (refillCooldownEndsAt == null) return;
+    const remaining = refillCooldownEndsAt - Date.now();
+    if (remaining <= 0) {
+      setRefillCooldownEndsAt(null);
+      setRefillPressesUsed(0);
+      return;
+    }
+    const t = setTimeout(() => {
+      setRefillCooldownEndsAt(null);
+      setRefillPressesUsed(0);
+    }, remaining);
+    return () => clearTimeout(t);
+  }, [refillCooldownEndsAt]);
   const onePlusLottieTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -160,25 +187,22 @@ export default function Home() {
     };
   }, []);
 
-  const fetchForBounds = useCallback(
-    async (bounds: MapBounds) => {
-      setIsFetchingBounds(true);
-      setCurrentBounds(bounds);
-      try {
-        const list = await fetchFountainsInBoundsCached(bounds);
-        setUserFountains(list);
-        // Persist cache in the background so next launch can show pins immediately
-        saveCachedFountains(list, bounds).catch(() => {
-          // ignore cache write errors
-        });
-      } catch {
-        // keep existing markers on error
-      } finally {
-        setIsFetchingBounds(false);
-      }
-    },
-    [],
-  );
+  const fetchForBounds = useCallback(async (bounds: MapBounds) => {
+    setIsFetchingBounds(true);
+    setCurrentBounds(bounds);
+    try {
+      const list = await fetchFountainsInBoundsCached(bounds);
+      setUserFountains(list);
+      // Persist cache in the background so next launch can show pins immediately
+      saveCachedFountains(list, bounds).catch(() => {
+        // ignore cache write errors
+      });
+    } catch {
+      // keep existing markers on error
+    } finally {
+      setIsFetchingBounds(false);
+    }
+  }, []);
 
   const handleMapRegionChange = useCallback(
     (region: {
@@ -413,7 +437,10 @@ export default function Home() {
                 delete fountainDetailsCacheRef.current[evictId];
               }
             }
-            full = { ...loaded, distance: fountain.distance ?? loaded.distance };
+            full = {
+              ...loaded,
+              distance: fountain.distance ?? loaded.distance,
+            };
           }
         } catch {
           // ignore and fall back to shallow fountain
@@ -478,11 +505,11 @@ export default function Home() {
   const handleAddLocationPress = useCallback(() => {
     if (!isSignedIn) {
       Alert.alert(
-        "Sign in required",
-        "You need to log in to add a water source.",
+        t("signInRequired"),
+        t("signInToAddLocation"),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+          { text: t("cancel"), style: "cancel" },
+          { text: t("signIn"), onPress: () => navigation.navigate("SignIn") },
         ],
       );
       return;
@@ -490,13 +517,33 @@ export default function Home() {
     if (!pendingAddCoordinate) return;
     setSheetContent("addSource");
     setCurrentSnap(1);
-  }, [isSignedIn, pendingAddCoordinate, navigation]);
+  }, [isSignedIn, pendingAddCoordinate, navigation, t]);
 
   const handleAddRefillPress = useCallback(async () => {
+    const now = Date.now();
+    if (
+      refillCooldownEndsAt != null &&
+      now < refillCooldownEndsAt
+    ) {
+      const secs = Math.ceil((refillCooldownEndsAt - now) / 1000);
+      Alert.alert(
+        t("refillCooldown"),
+        t("waitSeconds", { count: secs }),
+      );
+      return;
+    }
+    if (refillPressesUsed >= REFILL_LIMIT) {
+      setRefillCooldownEndsAt(now + REFILL_COOLDOWN_MS);
+      Alert.alert(
+        t("refillLimit"),
+        t("waitBeforeMoreRefills"),
+      );
+      return;
+    }
     if (!isSignedIn) {
-      Alert.alert("Sign in required", "You need to log in to log a refill.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Sign in", onPress: () => navigation.navigate("SignIn") },
+      Alert.alert(t("signInRequired"), t("signInToLogRefill"), [
+        { text: t("cancel"), style: "cancel" },
+        { text: t("signIn"), onPress: () => navigation.navigate("SignIn") },
       ]);
       return;
     }
@@ -506,8 +553,8 @@ export default function Home() {
     );
     if (!closestWithId) {
       Alert.alert(
-        "No refill station nearby",
-        "Add or open a fountain from the list to log a refill there.",
+        t("noRefillStationNearby"),
+        t("addOrOpenFountainToLog"),
       );
       return;
     }
@@ -515,6 +562,7 @@ export default function Home() {
     try {
       const ok = await logRefill(user.id, closestWithId.id as string);
       if (ok) {
+        setRefillPressesUsed((prev) => prev + 1);
         setShowOnePlusLottie(true);
         if (onePlusLottieTimeoutRef.current) {
           clearTimeout(onePlusLottieTimeoutRef.current);
@@ -532,7 +580,15 @@ export default function Home() {
     } finally {
       setLoggingRefill(false);
     }
-  }, [isSignedIn, user?.id, closestFountains, navigation]);
+  }, [
+    isSignedIn,
+    user?.id,
+    closestFountains,
+    navigation,
+    refillPressesUsed,
+    refillCooldownEndsAt,
+    t,
+  ]);
 
   const handleAddSourceClose = useCallback(() => {
     setSheetContent("list");
@@ -617,13 +673,15 @@ export default function Home() {
           style={({ pressed }) => [
             styles.addRefillButton,
             pressed && styles.addRefillButtonPressed,
+            (loggingRefill || refillCooldownEndsAt != null) &&
+              styles.addRefillButtonDisabled,
           ]}
           onPress={handleAddRefillPress}
-          disabled={loggingRefill}
-          accessibilityLabel="Log refill"
+          disabled={loggingRefill || refillCooldownEndsAt != null}
+          accessibilityLabel={t("logRefill")}
           accessibilityRole="button"
         >
-          <RefillOvalIcon width={87} height={46} />
+          <RefillOvalIcon width={96} height={51} />
         </Pressable>
       </View>
 
@@ -637,7 +695,7 @@ export default function Home() {
             />
             <TextInput
               style={styles.searchInput}
-              placeholder="Find a Refill Station"
+              placeholder={t("findRefillStation")}
               placeholderTextColor="#333333"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -739,16 +797,16 @@ export default function Home() {
           topInset={sheetTopInset}
           title={
             sheetContent === "list"
-              ? "Closest Fountains"
+              ? t("closestFountains")
               : sheetContent === "saved"
-                ? "Saved Locations"
+                ? t("savedLocations")
                 : undefined
           }
           subtitle={
             sheetContent === "list"
-              ? "Find the closest water fountains"
+              ? t("findClosestWaterFountains")
               : sheetContent === "saved"
-                ? "Your saved refill stations"
+                ? t("yourSavedRefillStations")
                 : undefined
           }
         >
@@ -811,10 +869,10 @@ export default function Home() {
                 ListEmptyComponent={
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyTitle}>
-                      No saved locations yet
+                      {t("noSavedLocationsYet")}
                     </Text>
                     <Text style={styles.emptySubtitle}>
-                      Open a fountain and tap the bookmark icon to save it.
+                      {t("openFountainAndSave")}
                     </Text>
                   </View>
                 }
@@ -901,6 +959,9 @@ const styles = StyleSheet.create({
   },
   addRefillButtonPressed: {
     opacity: 0.95,
+  },
+  addRefillButtonDisabled: {
+    opacity: 0.5,
   },
   leafSavedWrap: {
     position: "absolute",
