@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const KEY_MAP_TIME = "@app/mapTimeOfDay";
 const KEY_LANGUAGE = "@app/language";
 
-export type MapTimeOfDay = "morning" | "day" | "evening" | "night";
+export type MapTimeOfDay = "day" | "night" | "realistic";
 export type AppLanguage = "en" | "es";
 
 export const MAP_TIME_OPTIONS: {
@@ -11,10 +11,9 @@ export const MAP_TIME_OPTIONS: {
   labelEn: string;
   labelEs: string;
 }[] = [
-  { value: "morning", labelEn: "Morning", labelEs: "Mañana" },
   { value: "day", labelEn: "Day", labelEs: "Día" },
-  { value: "evening", labelEn: "Evening", labelEs: "Tarde" },
   { value: "night", labelEn: "Night", labelEs: "Noche" },
+  { value: "realistic", labelEn: "Realistic", labelEs: "Realista" },
 ];
 
 export const LANGUAGE_OPTIONS: {
@@ -29,8 +28,7 @@ export const LANGUAGE_OPTIONS: {
 export async function getStoredMapTimeOfDay(): Promise<MapTimeOfDay> {
   try {
     const v = await AsyncStorage.getItem(KEY_MAP_TIME);
-    if (v === "morning" || v === "day" || v === "evening" || v === "night")
-      return v;
+    if (v === "day" || v === "night" || v === "realistic") return v as MapTimeOfDay;
   } catch {}
   return "day";
 }
