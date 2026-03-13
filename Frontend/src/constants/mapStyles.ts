@@ -50,6 +50,13 @@ export function getMapStyleForTime(time: MapTimeOfDay): MapStyleConfig {
       customMapStyle: darkMapStyle,
     };
   }
+  if (time === "realistic") {
+    return {
+      mapType: "hybrid",
+      userInterfaceStyle: "light",
+      customMapStyle: undefined,
+    };
+  }
   return {
     mapType: "mutedStandard",
     userInterfaceStyle: "light",
